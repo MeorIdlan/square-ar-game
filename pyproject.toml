@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "square-ar-game"
+version = "0.1.0"
+description = "Physical AR floor elimination game using PyQt6, OpenCV, and MediaPipe"
+requires-python = ">=3.13"
+dependencies = [
+    "PyQt6",
+    "opencv-contrib-python",
+    "mediapipe",
+    "numpy",
+]
+
+[tool.setuptools]
+packages = [
+    "src",
+    "src.app",
+    "src.models",
+    "src.viewmodels",
+    "src.views",
+    "src.services",
+    "src.workers",
+    "src.utils",
+]

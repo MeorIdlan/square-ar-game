@@ -1,0 +1,1 @@
+"""Square AR game package."""
