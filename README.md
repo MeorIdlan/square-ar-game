@@ -65,6 +65,11 @@ This repository now includes:
 2. a Windows GitHub Actions build workflow at `.github/workflows/build-windows-exe.yml`
 3. a separate build dependency file at `requirements-build.txt`
 
+Release packaging behavior:
+
+1. pushes to `main` and pull requests build the Windows distribution and upload it as a workflow artifact
+2. pushing a tag like `v0.1.0` builds the Windows distribution, zips it, creates or updates a GitHub Release for that tag, and attaches the zip as a downloadable release asset
+
 To build locally with PyInstaller:
 
 ```bash
