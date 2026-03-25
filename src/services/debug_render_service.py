@@ -49,8 +49,14 @@ class DebugRenderService:
             x = margin + player.standing_point[0] / max(columns, 1) * grid_width
             y = margin + player.standing_point[1] / max(rows, 1) * grid_height
             painter.drawPoint(int(x), int(y))
+            painter.setPen(QColor("white"))
+            occupied_cell = "-" if player.occupied_cell is None else f"{player.occupied_cell[0]},{player.occupied_cell[1]}"
+            painter.drawText(int(x) + 8, int(y) - 8, f"{player.player_id} [{occupied_cell}] {player.status_text}")
+            painter.setPen(QPen(QColor("#00bfff"), 6))
 
         painter.setPen(QColor("white"))
         painter.drawText(16, 20, render_state.status_text)
+        painter.drawText(16, 42, f"Phase: {render_state.phase.name}")
+        painter.drawText(16, 64, f"Timer: {render_state.timer_text}")
         painter.end()
         return image

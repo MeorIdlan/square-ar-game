@@ -24,3 +24,7 @@ class CalibrationViewModel(QObject):
         frame = None if frame_packet is None else frame_packet.frame
         self._calibration_model = self._calibration_service.calibrate_from_frame(self._calibration_model, frame)
         self.calibration_updated.emit(self._calibration_model)
+
+    def reset(self) -> None:
+        self._calibration_model = self._calibration_service.reset(self._calibration_model)
+        self.calibration_updated.emit(self._calibration_model)

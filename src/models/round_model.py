@@ -21,6 +21,7 @@ class RoundModel:
     round_number: int = 0
     phase: RoundPhase = RoundPhase.IDLE
     timer_remaining: float = 0.0
+    flash_elapsed_seconds: float = 0.0
     timings: RoundTimingSettings = field(default_factory=RoundTimingSettings)
     participant_ids: list[str] = field(default_factory=list)
     survivor_ids: list[str] = field(default_factory=list)

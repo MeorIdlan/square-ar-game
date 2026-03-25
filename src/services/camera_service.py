@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
+from pathlib import Path
+import sys
 
 import cv2
 import numpy as np
@@ -36,6 +38,42 @@ class CameraService:
         capture.set(cv2.CAP_PROP_FPS, self.settings.target_fps)
         self._capture = capture
         return True
+
+    def set_camera_index(self, camera_index: int) -> None:
+        if camera_index == self.settings.camera_index:
+            return
+        self.release()
+        self.settings.camera_index = camera_index
+
+    def available_camera_indices(self, max_index: int = 5) -> list[int]:
+        if sys.platform.startswith("linux"):
+            linux_indices = self._linux_video_device_indices(max_index)
+            if self.settings.camera_index not in linux_indices:
+                linux_indices.append(self.settings.camera_index)
+            return sorted(set(linux_indices))
+
+        available: list[int] = []
+        for index in range(max_index + 1):
+            probe = cv2.VideoCapture(index)
+            if probe.isOpened():
+                available.append(index)
+                probe.release()
+                continue
+            probe.release()
+        if self.settings.camera_index not in available:
+            available.append(self.settings.camera_index)
+        return sorted(set(available))
+
+    @staticmethod
+    def _linux_video_device_indices(max_index: int) -> list[int]:
+        indices: list[int] = []
+        for path in sorted(Path("/dev").glob("video*")):
+            suffix = path.name.replace("video", "", 1)
+            if suffix.isdigit():
+                index = int(suffix)
+                if index <= max_index:
+                    indices.append(index)
+        return indices
 
     def release(self) -> None:
         if self._capture is not None:

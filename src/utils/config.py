@@ -32,11 +32,23 @@ class DisplaySettings:
 
 
 @dataclass(slots=True)
+class PoseSettings:
+    model_asset_path: str = "assets/models/pose_landmarker_lite.task"
+    num_poses: int = 4
+    min_pose_detection_confidence: float = 0.5
+    min_pose_presence_confidence: float = 0.5
+    min_tracking_confidence: float = 0.5
+    min_landmark_visibility: float = 0.4
+
+
+@dataclass(slots=True)
 class AppConfig:
     camera: CameraSettings = field(default_factory=CameraSettings)
     display: DisplaySettings = field(default_factory=DisplaySettings)
+    pose: PoseSettings = field(default_factory=PoseSettings)
     grid: GridSettings = field(default_factory=GridSettings)
     timings: RoundTimingSettings = field(default_factory=RoundTimingSettings)
+    aruco_dictionary: str = "DICT_6X6_1000"
     marker_ids: list[int] = field(default_factory=lambda: [0, 1, 2, 3])
 
 
@@ -57,8 +69,10 @@ class ConfigStore:
         return AppConfig(
             camera=CameraSettings(**raw_data.get("camera", {})),
             display=DisplaySettings(**raw_data.get("display", {})),
+            pose=PoseSettings(**raw_data.get("pose", {})),
             grid=GridSettings(**raw_data.get("grid", {})),
             timings=RoundTimingSettings(**raw_data.get("timings", {})),
+            aruco_dictionary=raw_data.get("aruco_dictionary", "DICT_6X6_1000"),
             marker_ids=raw_data.get("marker_ids", [0, 1, 2, 3]),
         )
 

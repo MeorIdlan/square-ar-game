@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import unittest
 
+import numpy as np
+
 from src.models.calibration_model import CalibrationModel
 from src.models.contracts import PoseFootState
 from src.models.enums import CalibrationState
@@ -15,18 +17,16 @@ class FloorMappingServiceTests(unittest.TestCase):
         self.grid = GridModel(rows=4, columns=4, playable_width=4.0, playable_height=4.0)
         self.calibration = CalibrationModel(
             state=CalibrationState.VALID,
-            homography=None,
+            homography=np.eye(3),
             outer_bounds=((0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)),
             playable_bounds=((0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)),
         )
 
     def test_resolves_midpoint_from_two_feet(self) -> None:
-        pose_state = PoseFootState(left_foot=(1.0, 1.0), right_foot=(2.0, 1.0), confidence=0.9)
-        self.assertEqual(self.service.resolve_feet_midpoint(pose_state), (1.5, 1.0))
+        self.assertEqual(self.service.resolve_feet_midpoint((1.0, 1.0), (2.0, 1.0)), (1.5, 1.0))
 
     def test_single_foot_fallback(self) -> None:
-        pose_state = PoseFootState(left_foot=(1.25, 2.75), confidence=0.9)
-        self.assertEqual(self.service.resolve_feet_midpoint(pose_state), (1.25, 2.75))
+        self.assertEqual(self.service.resolve_feet_midpoint((1.25, 2.75), None), (1.25, 2.75))
 
     def test_maps_point_to_cell_when_inside_bounds(self) -> None:
         pose_state = PoseFootState(left_foot=(1.2, 1.2), right_foot=(1.6, 1.2), confidence=0.8)
@@ -47,6 +47,19 @@ class FloorMappingServiceTests(unittest.TestCase):
         mapped = self.service.map_detection("P1", pose_state, self.grid, self.calibration)
         self.assertFalse(mapped.in_bounds)
         self.assertIsNone(mapped.occupied_cell)
+
+    def test_maps_points_using_homography_before_cell_resolution(self) -> None:
+        self.calibration.homography = np.array(
+            [[0.02, 0.0, 0.0], [0.0, 0.02, 0.0], [0.0, 0.0, 1.0]],
+            dtype=np.float32,
+        )
+        pose_state = PoseFootState(left_foot=(60.0, 60.0), right_foot=(80.0, 60.0), confidence=0.8)
+        mapped = self.service.map_detection("P1", pose_state, self.grid, self.calibration)
+        self.assertIsNotNone(mapped.standing_point)
+        assert mapped.standing_point is not None
+        self.assertAlmostEqual(mapped.standing_point[0], 1.4, places=4)
+        self.assertAlmostEqual(mapped.standing_point[1], 1.2, places=4)
+        self.assertEqual(mapped.occupied_cell, (1, 1))
 
 
 if __name__ == "__main__":

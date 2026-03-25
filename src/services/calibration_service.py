@@ -12,10 +12,42 @@ from src.utils.config import AppConfig
 
 
 class CalibrationService:
+    SUPPORTED_DICTIONARIES: dict[str, int] = {
+        "DICT_4X4_50": cv2.aruco.DICT_4X4_50,
+        "DICT_4X4_100": cv2.aruco.DICT_4X4_100,
+        "DICT_4X4_250": cv2.aruco.DICT_4X4_250,
+        "DICT_4X4_1000": cv2.aruco.DICT_4X4_1000,
+        "DICT_5X5_50": cv2.aruco.DICT_5X5_50,
+        "DICT_5X5_100": cv2.aruco.DICT_5X5_100,
+        "DICT_5X5_250": cv2.aruco.DICT_5X5_250,
+        "DICT_5X5_1000": cv2.aruco.DICT_5X5_1000,
+        "DICT_6X6_50": cv2.aruco.DICT_6X6_50,
+        "DICT_6X6_100": cv2.aruco.DICT_6X6_100,
+        "DICT_6X6_250": cv2.aruco.DICT_6X6_250,
+        "DICT_6X6_1000": cv2.aruco.DICT_6X6_1000,
+        "DICT_7X7_50": cv2.aruco.DICT_7X7_50,
+        "DICT_7X7_100": cv2.aruco.DICT_7X7_100,
+        "DICT_7X7_250": cv2.aruco.DICT_7X7_250,
+        "DICT_7X7_1000": cv2.aruco.DICT_7X7_1000,
+    }
+
     def __init__(self, config: AppConfig) -> None:
         self._config = config
-        self._aruco_dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
         self._detector_parameters = cv2.aruco.DetectorParameters()
+
+    @classmethod
+    def supported_dictionary_names(cls) -> list[str]:
+        return list(cls.SUPPORTED_DICTIONARIES.keys())
+
+    def _dictionary_name(self) -> str:
+        dictionary_name = self._config.aruco_dictionary
+        if dictionary_name not in self.SUPPORTED_DICTIONARIES:
+            return "DICT_6X6_1000"
+        return dictionary_name
+
+    def _aruco_dictionary(self):
+        dictionary_id = self.SUPPORTED_DICTIONARIES[self._dictionary_name()]
+        return cv2.aruco.getPredefinedDictionary(dictionary_id)
 
     def calibrate_from_frame(self, model: CalibrationModel, frame: np.ndarray | None) -> CalibrationModel:
         if frame is None:
@@ -28,9 +60,20 @@ class CalibrationService:
         detected_markers = self.detect_markers(frame)
         return self.calibrate_from_detected_markers(model, detected_markers)
 
+    def reset(self, model: CalibrationModel) -> CalibrationModel:
+        return replace(
+            model,
+            state=CalibrationState.NOT_CALIBRATED,
+            detected_marker_corners={},
+            homography=None,
+            outer_bounds=None,
+            playable_bounds=None,
+            validation_message="Calibration reset. Ready to calibrate.",
+        )
+
     def detect_markers(self, frame: np.ndarray) -> dict[int, np.ndarray]:
         grayscale = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        detector = cv2.aruco.ArucoDetector(self._aruco_dictionary, self._detector_parameters)
+        detector = cv2.aruco.ArucoDetector(self._aruco_dictionary(), self._detector_parameters)
         corners, ids, _ = detector.detectMarkers(grayscale)
         if ids is None:
             return {}
@@ -68,7 +111,7 @@ class CalibrationService:
                 outer_bounds=None,
                 playable_bounds=None,
                 validation_message=(
-                    "Calibration requires all 4 markers visible. Missing marker IDs: "
+                    f"Calibration requires all 4 markers visible using {self._dictionary_name()}. Missing marker IDs: "
                     + ", ".join(str(marker_id) for marker_id in missing_ids)
                 ),
             )
@@ -132,7 +175,7 @@ class CalibrationService:
             homography=homography,
             outer_bounds=outer,
             playable_bounds=inner,
-            validation_message="Calibration locked using all 4 ArUco markers.",
+            validation_message=f"Calibration locked using {self._dictionary_name()} and all 4 ArUco markers.",
         )
 
     @staticmethod

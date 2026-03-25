@@ -28,3 +28,15 @@ class CalibrationModel:
     @property
     def is_valid(self) -> bool:
         return self.state is CalibrationState.VALID and self.homography is not None
+
+    @property
+    def detected_marker_ids(self) -> list[int]:
+        return sorted(self.detected_marker_corners.keys())
+
+    @property
+    def detected_marker_count(self) -> int:
+        return len(self.detected_marker_corners)
+
+    @property
+    def missing_marker_ids(self) -> list[int]:
+        return [marker_id for marker_id in self.marker_layout.marker_ids if marker_id not in self.detected_marker_corners]

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 from PyQt6.QtWidgets import QApplication
 
@@ -11,7 +12,9 @@ from src.services.debug_render_service import DebugRenderService
 from src.services.floor_mapping_service import FloorMappingService
 from src.services.game_engine_service import GameEngineService
 from src.services.overlay_render_service import OverlayRenderService
+from src.services.player_tracker_service import PlayerTrackerService
 from src.services.pose_tracking_service import PoseTrackingService
+from src.utils.app_paths import application_root
 from src.utils.config import ConfigStore
 from src.utils.logging import configure_logging
 from src.viewmodels.calibration_viewmodel import CalibrationViewModel
@@ -40,6 +43,7 @@ class BootstrapContext:
 def build_application() -> BootstrapContext:
     configure_logging()
     app = QApplication.instance() or QApplication([])
+    project_root = application_root()
 
     config_store = ConfigStore()
     config = config_store.load()
@@ -52,9 +56,13 @@ def build_application() -> BootstrapContext:
 
     camera_service = CameraService(config.camera)
     calibration_service = CalibrationService(config)
-    pose_tracking_service = PoseTrackingService()
+    pose_model_path = Path(config.pose.model_asset_path)
+    if not pose_model_path.is_absolute():
+        pose_model_path = project_root / pose_model_path
+    pose_tracking_service = PoseTrackingService(config.pose, pose_model_path)
     floor_mapping_service = FloorMappingService()
     game_engine_service = GameEngineService()
+    player_tracker_service = PlayerTrackerService()
     overlay_render_service = OverlayRenderService()
     debug_render_service = DebugRenderService()
 
@@ -70,8 +78,10 @@ def build_application() -> BootstrapContext:
         game_viewmodel=game_viewmodel,
         projector_viewmodel=projector_viewmodel,
         debug_viewmodel=debug_viewmodel,
+        camera_service=camera_service,
         floor_mapping_service=floor_mapping_service,
         game_engine_service=game_engine_service,
+        player_tracker_service=player_tracker_service,
     )
 
     main_window = MainWindow(main_viewmodel)
@@ -80,6 +90,7 @@ def build_application() -> BootstrapContext:
 
     projector_viewmodel.image_updated.connect(projector_window.set_image)
     debug_viewmodel.image_updated.connect(debug_window.set_image)
+    main_viewmodel.projector_screen_changed.connect(projector_window.set_target_screen)
 
     camera_worker = CameraWorker(camera_service)
     vision_worker = VisionWorker(pose_tracking_service)
@@ -88,6 +99,7 @@ def build_application() -> BootstrapContext:
     vision_worker.pose_ready.connect(main_viewmodel.handle_pose_result)
     app.aboutToQuit.connect(camera_worker.stop)
     app.aboutToQuit.connect(lambda: camera_service.release())
+    app.aboutToQuit.connect(lambda: pose_tracking_service.close())
 
     main_viewmodel.initialize()
     camera_worker.start(interval_ms=max(1, int(1000 / max(config.camera.target_fps, 1))))
