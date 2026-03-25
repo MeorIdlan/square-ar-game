@@ -17,6 +17,10 @@ class FramePacket:
     frame_id: int
     timestamp: float = field(default_factory=monotonic)
     frame: np.ndarray | None = None
+    camera_index: int | None = None
+    is_live: bool = False
+    source_name: str = "fallback"
+    error_message: str | None = None
 
 
 @dataclass(slots=True)
@@ -62,5 +66,8 @@ class RenderState:
     phase: RoundPhase = RoundPhase.IDLE
     timer_text: str = "00.0"
     status_text: str = "Idle"
+    camera_status_text: str = "Camera status unknown"
+    calibration_status_text: str = "Not calibrated"
+    display_status_text: str = "Projector not assigned"
     grid_cells: dict[CellIndex, CellState] = field(default_factory=dict)
     players: list[RenderPlayerState] = field(default_factory=list)

@@ -49,12 +49,38 @@ class CalibrationService:
         dictionary_id = self.SUPPORTED_DICTIONARIES[self._dictionary_name()]
         return cv2.aruco.getPredefinedDictionary(dictionary_id)
 
-    def calibrate_from_frame(self, model: CalibrationModel, frame: np.ndarray | None) -> CalibrationModel:
+    def calibrate_from_frame(
+        self,
+        model: CalibrationModel,
+        frame: np.ndarray | None,
+        *,
+        is_live_source: bool = True,
+        source_error: str | None = None,
+    ) -> CalibrationModel:
         if frame is None:
             return replace(
                 model,
                 state=CalibrationState.INVALID,
+                detected_marker_corners={},
+                homography=None,
+                outer_bounds=None,
+                playable_bounds=None,
                 validation_message="No camera frame available for calibration.",
+            )
+
+        if not is_live_source:
+            detail = source_error or "Live camera feed unavailable."
+            return replace(
+                model,
+                state=CalibrationState.INVALID,
+                detected_marker_corners={},
+                homography=None,
+                outer_bounds=None,
+                playable_bounds=None,
+                validation_message=(
+                    "Calibration requires a live camera frame. "
+                    f"Current source is fallback mode: {detail}"
+                ),
             )
 
         detected_markers = self.detect_markers(frame)

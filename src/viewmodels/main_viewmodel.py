@@ -64,6 +64,10 @@ class MainViewModel(QObject):
     def initialize(self) -> None:
         self._session_model.app_state = AppState.CAMERA_READY
         self._session_model.status_message = "Ready to calibrate"
+        self._session_model.camera_status_message = "Waiting for camera frames"
+        self._session_model.display_status_message = (
+            f"Projector assigned to display {self._config.display.projector_screen_index}"
+        )
         self.projector_screen_changed.emit(self._config.display.projector_screen_index)
         self._publish_session(self._session_model)
 
@@ -93,12 +97,42 @@ class MainViewModel(QObject):
         self._config.camera.camera_index = camera_index
         self._camera_service.set_camera_index(camera_index)
         self._session_model.status_message = f"Switched to camera index {camera_index}"
+        self._session_model.camera_status_message = f"Camera {camera_index} selected. Waiting for live frames"
         self._publish_session(self._session_model)
+
+    def refresh_camera_sources(self) -> list[int]:
+        indices = self._camera_service.available_camera_indices()
+        if indices:
+            self._session_model.status_message = f"Detected camera indices: {', '.join(str(index) for index in indices)}"
+        else:
+            self._session_model.status_message = "No camera indices detected"
+        self._publish_session(self._session_model)
+        return indices
+
+    def reconnect_camera(self) -> None:
+        if self._camera_service.reconnect():
+            self._session_model.camera_status_message = (
+                f"Camera {self._config.camera.camera_index} reconnected. Waiting for live frame confirmation"
+            )
+            self._session_model.status_message = f"Reconnect requested for camera {self._config.camera.camera_index}"
+        else:
+            detail = self._camera_service.last_error_message or "Live camera feed unavailable."
+            self._session_model.camera_status_message = f"Fallback frame in use. {detail}"
+            self._session_model.status_message = f"Reconnect failed for camera {self._config.camera.camera_index}"
+        self._publish_session(self._session_model)
+
+    def update_display_probe(self, screen_count: int) -> None:
+        self._session_model.display_status_message = (
+            f"Projector assigned to display {self._config.display.projector_screen_index} | "
+            f"{screen_count} display(s) detected"
+        )
+        self.session_changed.emit(self._session_model)
 
     def update_projector_screen_index(self, screen_index: int) -> None:
         self._config.display.projector_screen_index = screen_index
         self.projector_screen_changed.emit(screen_index)
         self._session_model.status_message = f"Projector assigned to display {screen_index}"
+        self._session_model.display_status_message = f"Projector assigned to display {screen_index}"
         self._publish_session(self._session_model)
 
     def start_round(self) -> None:
@@ -147,12 +181,19 @@ class MainViewModel(QObject):
 
     def handle_frame_packet(self, frame_packet: FramePacket) -> None:
         self._latest_frame_packet = frame_packet
+        if frame_packet.is_live:
+            self._session_model.camera_status_message = f"Camera {frame_packet.camera_index} live"
+        else:
+            detail = frame_packet.error_message or "Live camera feed unavailable."
+            self._session_model.camera_status_message = f"Fallback frame in use. {detail}"
         render_state = self._game_engine_service.build_render_state(self._session_model)
         self.projector_viewmodel.update_render_state(
             render_state,
             frame_packet=self._latest_frame_packet,
             calibration=self._session_model.calibration,
         )
+        self.debug_viewmodel.update_render_state(render_state)
+        self.session_changed.emit(self._session_model)
 
     def handle_pose_result(self, pose_result: PoseResult) -> None:
         mapped_detections: list[MappedPlayerState] = []

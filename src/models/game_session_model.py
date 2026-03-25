@@ -18,3 +18,5 @@ class GameSessionModel:
     players: dict[str, PlayerModel] = field(default_factory=dict)
     winner_id: str | None = None
     status_message: str = "Booting"
+    camera_status_message: str = "Waiting for camera frames"
+    display_status_message: str = "Projector not assigned"

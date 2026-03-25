@@ -43,6 +43,20 @@ class CalibrationServiceTests(unittest.TestCase):
         self.assertEqual(result.outer_bounds, ((0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)))
         self.assertEqual(result.playable_bounds, ((0.2, 0.2), (3.8, 0.2), (3.8, 3.8), (0.2, 3.8)))
 
+    def test_calibration_rejects_fallback_frame_sources(self) -> None:
+        frame = np.zeros((64, 64, 3), dtype=np.uint8)
+
+        result = self.service.calibrate_from_frame(
+            self.model,
+            frame,
+            is_live_source=False,
+            source_error="Unable to open camera index 0.",
+        )
+
+        self.assertEqual(result.state, CalibrationState.INVALID)
+        self.assertIn("requires a live camera frame", result.validation_message)
+        self.assertIn("Unable to open camera index 0.", result.validation_message)
+
 
 if __name__ == "__main__":
     unittest.main()

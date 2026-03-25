@@ -58,5 +58,8 @@ class DebugRenderService:
         painter.drawText(16, 20, render_state.status_text)
         painter.drawText(16, 42, f"Phase: {render_state.phase.name}")
         painter.drawText(16, 64, f"Timer: {render_state.timer_text}")
+        painter.drawText(16, 86, f"Camera: {render_state.camera_status_text}")
+        painter.drawText(16, 108, f"Display: {render_state.display_status_text}")
+        painter.drawText(16, 130, f"Calibration: {render_state.calibration_status_text}")
         painter.end()
         return image

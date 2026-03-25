@@ -115,6 +115,12 @@ class OverlayRenderService:
         painter.drawText(24, 36, f"Status: {render_state.status_text}")
         painter.drawText(24, 64, f"Phase: {render_state.phase.name}")
         painter.drawText(24, 92, f"Timer: {render_state.timer_text}")
+        painter.drawText(24, 120, f"Camera: {render_state.camera_status_text}")
+        painter.drawText(24, 148, f"Display: {render_state.display_status_text}")
+
+        painter.setPen(QColor("#ffd166"))
+        painter.drawText(24, 176, f"Calibration: {render_state.calibration_status_text}")
+        painter.setPen(QColor("white"))
 
         for index, player in enumerate(render_state.players, start=1):
             painter.drawText(24, height - 24 - (index - 1) * 20, f"{player.player_id}: {player.status_text}")

@@ -19,16 +19,19 @@ class CameraService:
     _capture: cv2.VideoCapture | None = None
     _logger: logging.Logger | None = None
     _latest_frame: np.ndarray | None = None
+    _last_error_message: str | None = None
 
     def __post_init__(self) -> None:
         self._logger = logging.getLogger(__name__)
 
     def open(self) -> bool:
         if self._capture is not None and self._capture.isOpened():
+            self._last_error_message = None
             return True
 
         capture = cv2.VideoCapture(self.settings.camera_index)
         if not capture.isOpened():
+            self._last_error_message = f"Unable to open camera index {self.settings.camera_index}."
             self._logger.warning("Unable to open camera index %s", self.settings.camera_index)
             self._capture = None
             return False
@@ -37,6 +40,7 @@ class CameraService:
         capture.set(cv2.CAP_PROP_FRAME_HEIGHT, self.settings.frame_height)
         capture.set(cv2.CAP_PROP_FPS, self.settings.target_fps)
         self._capture = capture
+        self._last_error_message = None
         return True
 
     def set_camera_index(self, camera_index: int) -> None:
@@ -80,11 +84,19 @@ class CameraService:
             self._capture.release()
         self._capture = None
 
+    def reconnect(self) -> bool:
+        self.release()
+        return self.open()
+
     @property
     def latest_frame(self) -> np.ndarray | None:
         if self._latest_frame is None:
             return None
         return self._latest_frame.copy()
+
+    @property
+    def last_error_message(self) -> str | None:
+        return self._last_error_message
 
     def next_frame(self) -> FramePacket:
         if self.open() and self._capture is not None:
@@ -92,14 +104,29 @@ class CameraService:
             if ok and frame is not None:
                 self._frame_id += 1
                 self._latest_frame = frame.copy()
-                return FramePacket(frame_id=self._frame_id, frame=frame)
+                self._last_error_message = None
+                return FramePacket(
+                    frame_id=self._frame_id,
+                    frame=frame,
+                    camera_index=self.settings.camera_index,
+                    is_live=True,
+                    source_name="camera",
+                )
 
+            self._last_error_message = f"Camera read failed for camera index {self.settings.camera_index}."
             self._logger.warning("Camera read failed for camera index %s", self.settings.camera_index)
 
         frame = self._fallback_frame()
         self._frame_id += 1
         self._latest_frame = frame.copy()
-        return FramePacket(frame_id=self._frame_id, frame=frame)
+        return FramePacket(
+            frame_id=self._frame_id,
+            frame=frame,
+            camera_index=self.settings.camera_index,
+            is_live=False,
+            source_name="fallback",
+            error_message=self._last_error_message or "Live camera feed unavailable.",
+        )
 
     def _fallback_frame(self) -> np.ndarray:
         height = self.settings.frame_height

@@ -50,10 +50,22 @@ class MainWindow(QMainWindow):
         self._camera_combo.currentIndexChanged.connect(self._on_camera_changed)
         controls_layout.addRow("Camera", self._camera_combo)
 
+        refresh_cameras_button = QPushButton("Rescan Cameras")
+        refresh_cameras_button.clicked.connect(self._refresh_camera_choices)
+        controls_layout.addRow(refresh_cameras_button)
+
+        reconnect_camera_button = QPushButton("Reconnect Camera")
+        reconnect_camera_button.clicked.connect(self._reconnect_camera)
+        controls_layout.addRow(reconnect_camera_button)
+
         self._display_combo = QComboBox()
         self._populate_display_choices()
         self._display_combo.currentIndexChanged.connect(self._on_display_changed)
         controls_layout.addRow("Projector Display", self._display_combo)
+
+        refresh_displays_button = QPushButton("Refresh Displays")
+        refresh_displays_button.clicked.connect(self._refresh_display_choices)
+        controls_layout.addRow(refresh_displays_button)
 
         self._aruco_dictionary_combo = QComboBox()
         self._populate_aruco_dictionary_choices()
@@ -99,6 +111,14 @@ class MainWindow(QMainWindow):
 
         self._calibration_state_label = QLabel("NOT_CALIBRATED")
         controls_layout.addRow("Calibration", self._calibration_state_label)
+
+        self._camera_health_label = QLabel("Waiting for camera frames")
+        self._camera_health_label.setWordWrap(True)
+        controls_layout.addRow("Camera Health", self._camera_health_label)
+
+        self._display_health_label = QLabel("Projector not assigned")
+        self._display_health_label.setWordWrap(True)
+        controls_layout.addRow("Display Health", self._display_health_label)
 
         self._calibration_markers_label = QLabel("0 visible")
         controls_layout.addRow("Markers", self._calibration_markers_label)
@@ -162,6 +182,8 @@ class MainWindow(QMainWindow):
         self._phase_label.setText(session_model.round_state.phase.name)
         self._timer_label.setText(f"{session_model.round_state.timer_remaining:0.1f}")
         self._calibration_state_label.setText(session_model.calibration.state.name)
+        self._camera_health_label.setText(session_model.camera_status_message)
+        self._display_health_label.setText(session_model.display_status_message)
         visible_ids = ", ".join(str(marker_id) for marker_id in session_model.calibration.detected_marker_ids) or "none"
         missing_ids = ", ".join(str(marker_id) for marker_id in session_model.calibration.missing_marker_ids) or "none"
         self._calibration_markers_label.setText(
@@ -203,6 +225,7 @@ class MainWindow(QMainWindow):
 
     def _populate_display_choices(self) -> None:
         current_index = self._viewmodel.config.display.projector_screen_index
+        screen_count = len(QGuiApplication.screens())
         self._display_combo.blockSignals(True)
         self._display_combo.clear()
         for screen_index, screen in enumerate(QGuiApplication.screens()):
@@ -213,6 +236,11 @@ class MainWindow(QMainWindow):
         if selected_index >= 0:
             self._display_combo.setCurrentIndex(selected_index)
         self._display_combo.blockSignals(False)
+        self._viewmodel.update_display_probe(screen_count)
+        if hasattr(self, "_display_health_label"):
+            self._display_health_label.setText(
+                f"Projector assigned to display {current_index} | {screen_count} display(s) detected"
+            )
 
     def _populate_aruco_dictionary_choices(self) -> None:
         current_value = self._viewmodel.config.aruco_dictionary
@@ -245,6 +273,16 @@ class MainWindow(QMainWindow):
         dictionary_name = self._aruco_dictionary_combo.itemData(combo_index)
         if isinstance(dictionary_name, str):
             self._viewmodel.update_aruco_dictionary(dictionary_name)
+
+    def _refresh_camera_choices(self) -> None:
+        self._viewmodel.refresh_camera_sources()
+        self._populate_camera_choices()
+
+    def _reconnect_camera(self) -> None:
+        self._viewmodel.reconnect_camera()
+
+    def _refresh_display_choices(self) -> None:
+        self._populate_display_choices()
 
     def _on_revive_player(self) -> None:
         player_id = self._selected_player_id()
