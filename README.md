@@ -16,14 +16,19 @@ The project currently provides:
 - configurable ArUco dictionary selection, supporting 4x4/5x5/6x6/7x7 families with 50/100/250/1000 variants, defaulting to `DICT_6X6_1000`
 - MediaPipe Tasks pose tracking using a local pose landmarker model asset
 - live projector rendering over the camera frame with projected cell overlays and player markers
+- projector and debug HUD diagnostics for camera, display, phase, timer, and calibration status
 - worker scaffolding for camera and pose threads
 - floor-space player identity tracking with nearest-neighbor matching
 - short missed-detection grace-period handling before players become missing
 - automatic round phase progression using configurable timings
 - operator controls for forcing the next round, resetting the session, and overriding player outcomes
+- operator controls for rescanning camera indices, reconnecting the selected camera, and refreshing display enumeration
+- explicit live-vs-fallback camera diagnostics so calibration is blocked when the app is using a synthetic fallback frame
 - deterministic elimination checks for missing, ambiguous, out-of-bounds, and red-cell outcomes
+- persisted settings at `~/.square-ar-game/settings.json`
+- PyInstaller packaging for Windows via GitHub Actions, including tag-triggered GitHub Release assets
 
-Camera-backed gameplay validation and packaging are the main remaining milestones.
+The main remaining work is real-hardware validation and tuning, not core scaffolding.
 
 ## Platform notes
 
@@ -35,6 +40,8 @@ For MediaPipe Tasks to initialize correctly on Linux, install a GLES runtime fir
 sudo apt install libgles2-mesa
 ```
 
+If you are running under WSL2, the app can render Qt windows and enumerate displays, but camera access still depends on the webcam being exposed into the Linux environment. If no `/dev/video*` device is present, the app will switch to its fallback frame and report that in the control window, projector HUD, and debug window.
+
 ### Windows prerequisites
 
 If you run the game from source on Windows, install these first:
@@ -42,6 +49,7 @@ If you run the game from source on Windows, install these first:
 1. Python 3.13 x64
 2. Microsoft Visual C++ Redistributable 2015-2022 x64
 3. A working webcam driver for the camera you plan to use
+4. A graphics driver stack capable of running PyQt6, OpenCV, and MediaPipe Tasks
 
 Then install the Python packages from this repository:
 
@@ -88,17 +96,40 @@ Create and activate a Python environment, install the dependencies, then run:
 python -m src.main
 ```
 
+On Windows, the equivalent command is:
+
+```bash
+py -3.13 -m src.main
+```
+
+## Operator workflow
+
+1. Start the app and confirm the control window shows a live camera status rather than fallback mode.
+2. Use `Rescan Cameras` if camera indices have changed or the device was connected after startup.
+3. Use `Reconnect Camera` if the selected camera stopped responding.
+4. Confirm the target projector display in `Projector Display`, then use `Refresh Displays` if monitors were added or removed.
+5. Present all four configured ArUco markers and run calibration.
+6. Start the round only after calibration reports a valid lock.
+
+## Calibration behavior
+
+- Calibration requires all four configured marker IDs to be visible in one frame.
+- The default marker IDs are `0, 1, 2, 3`.
+- The default ArUco dictionary is `DICT_6X6_1000`.
+- Calibration is rejected when the app is using a fallback frame instead of a live camera image.
+- Calibration diagnostics distinguish between missing markers, invalid marker geometry, homography failure, and unavailable camera input.
+
 ## Next implementation targets
 
-1. Validate live camera and projector selection against real hardware.
-2. Tune calibration recovery and operator-facing error messaging.
-3. Improve the projector and debug views with deeper calibration overlays.
-4. Add operator-facing camera health and reconnect feedback.
+1. Validate live camera capture end-to-end on native Windows hardware.
+2. Tune marker detection thresholds and pose mapping against the real play area.
+3. Add richer calibration overlays for marker placement quality and homography confidence.
+4. Expose marker ID editing in the operator UI if field setup needs it.
 
 ## What can still be built before a camera is connected?
 
-The most useful remaining milestones that do not require live hardware are:
+The most useful remaining milestones that do not require live hardware are now:
 
-1. richer projector and debug diagnostics for calibration and tracking state
-2. manual calibration diagnostics and recovery messaging
-3. operator-facing camera health and reconnect messaging
+1. marker-ID editing and additional persisted setup controls
+2. richer calibration overlays and operator guidance text
+3. packaging polish and release automation refinements
