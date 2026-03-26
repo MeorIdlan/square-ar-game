@@ -300,7 +300,7 @@ class MainViewModel(QObject):
             if player.tracking_state is PlayerTrackingState.ACTIVE
         )
         self._session_model.pose_status_message = (
-            f"{pose_result.status_text} | mapped {mapped_count} | in bounds {in_bounds_count}"
+            f"{pose_result.status_text} | mapped {mapped_count} | in bounds {in_bounds_count} | delegate {self._pose_tracking_service.active_delegate_name}"
         )
         self._session_model.status_message = f"Tracking {active_count} active player(s)"
 

@@ -271,6 +271,8 @@ class GameEngineService:
     def build_render_state(self, session: GameSessionModel) -> RenderState:
         render_players = []
         for player in session.players.values():
+            if player.tracking_state is PlayerTrackingState.MISSING and player.standing_point is None and not player.active_in_round:
+                continue
             status_text = player.tracking_state.name.lower().replace("_", " ")
             render_players.append(
                 RenderPlayerState(

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import logging
 from pathlib import Path
 
+from PyQt6.QtCore import QThread
 from PyQt6.QtWidgets import QApplication
 
 from src.models.game_session_model import GameSessionModel
@@ -39,6 +40,7 @@ class BootstrapContext:
     main_viewmodel: MainViewModel
     camera_worker: CameraWorker
     vision_worker: VisionWorker
+    vision_thread: QThread
 
 
 def build_application() -> BootstrapContext:
@@ -107,6 +109,9 @@ def build_application() -> BootstrapContext:
 
     camera_worker = CameraWorker(camera_service)
     vision_worker = VisionWorker(pose_tracking_service)
+    vision_thread = QThread()
+    vision_worker.moveToThread(vision_thread)
+    vision_thread.start()
     camera_worker.frame_ready.connect(main_viewmodel.handle_frame_packet)
     camera_worker.frame_ready.connect(vision_worker.process_frame)
     vision_worker.pose_ready.connect(main_viewmodel.handle_pose_result)
@@ -114,6 +119,8 @@ def build_application() -> BootstrapContext:
     app.aboutToQuit.connect(camera_worker.stop)
     app.aboutToQuit.connect(lambda: camera_service.release())
     app.aboutToQuit.connect(lambda: pose_tracking_service.close())
+    app.aboutToQuit.connect(vision_thread.quit)
+    app.aboutToQuit.connect(lambda: vision_thread.wait(2000))
 
     main_viewmodel.initialize()
     camera_worker.start(interval_ms=max(1, int(1000 / max(config.camera.target_fps, 1))))
@@ -127,4 +134,5 @@ def build_application() -> BootstrapContext:
         main_viewmodel=main_viewmodel,
         camera_worker=camera_worker,
         vision_worker=vision_worker,
+        vision_thread=vision_thread,
     )

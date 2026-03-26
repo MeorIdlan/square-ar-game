@@ -68,6 +68,24 @@ class PlayerTrackerServiceTests(unittest.TestCase):
         self.service.update_players(players, [], timestamp=10.5, grace_period_seconds=0.35)
 
         self.assertEqual(players["P1"].tracking_state, PlayerTrackingState.MISSING)
+        self.assertIsNone(players["P1"].standing_point)
+
+    def test_reuses_missing_player_id_for_new_detection(self) -> None:
+        players = {
+            "P1": PlayerModel(
+                player_id="P1",
+                standing_point=None,
+                tracking_state=PlayerTrackingState.MISSING,
+                last_seen_at=10.0,
+            )
+        }
+        detections = [MappedPlayerState(player_id="d1", standing_point=(1.5, 1.5), in_bounds=True)]
+
+        self.service.update_players(players, detections, timestamp=10.6, grace_period_seconds=0.35)
+
+        self.assertEqual(set(players.keys()), {"P1"})
+        self.assertEqual(players["P1"].tracking_state, PlayerTrackingState.ACTIVE)
+        self.assertEqual(players["P1"].standing_point, (1.5, 1.5))
 
 
 if __name__ == "__main__":

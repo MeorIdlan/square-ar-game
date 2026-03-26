@@ -62,6 +62,7 @@ class PoseSettings:
     min_pose_presence_confidence: float = 0.35
     min_tracking_confidence: float = 0.35
     min_landmark_visibility: float = 0.2
+    use_gpu_if_available: bool = True
 
 
 POSE_MODEL_OPTIONS: dict[str, str] = {

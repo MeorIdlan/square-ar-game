@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Any
 
 import cv2
 import mediapipe as mp
@@ -16,18 +17,20 @@ class PoseTrackingService:
         self._settings = settings
         self._model_asset_path = model_asset_path
         self._logger = logging.getLogger(__name__)
-        self._landmarker: object | None = None
+        self._landmarker: Any | None = None
         self._initialization_failed = False
         self._last_status_text: str | None = None
         self._missing_model_logged = False
+        self._active_delegate_name = "CPU"
         self._logger.info(
-            "Pose tracking initialized model=%s num_poses=%s thresholds=(detect=%s presence=%s tracking=%s landmark=%s)",
+            "Pose tracking initialized model=%s num_poses=%s thresholds=(detect=%s presence=%s tracking=%s landmark=%s) use_gpu_if_available=%s",
             self._model_asset_path,
             self._settings.num_poses,
             self._settings.min_pose_detection_confidence,
             self._settings.min_pose_presence_confidence,
             self._settings.min_tracking_confidence,
             self._settings.min_landmark_visibility,
+            self._settings.use_gpu_if_available,
         )
 
     @property
@@ -42,7 +45,12 @@ class PoseTrackingService:
         self._initialization_failed = False
         self._last_status_text = None
         self._missing_model_logged = False
+        self._active_delegate_name = "CPU"
         self._logger.info("Pose model switched to %s", self._model_asset_path)
+
+    @property
+    def active_delegate_name(self) -> str:
+        return self._active_delegate_name
 
     def process_frame(self, frame_packet: FramePacket) -> PoseResult:
         frame = frame_packet.frame
@@ -104,23 +112,40 @@ class PoseTrackingService:
             self._initialization_failed = True
             return None
 
-        options = mp.tasks.vision.PoseLandmarkerOptions(
-            base_options=mp.tasks.BaseOptions(model_asset_path=str(self._model_asset_path)),
-            running_mode=mp.tasks.vision.RunningMode.VIDEO,
-            num_poses=self._settings.num_poses,
-            min_pose_detection_confidence=self._settings.min_pose_detection_confidence,
-            min_pose_presence_confidence=self._settings.min_pose_presence_confidence,
-            min_tracking_confidence=self._settings.min_tracking_confidence,
-            output_segmentation_masks=False,
-        )
-        try:
-            self._landmarker = mp.tasks.vision.PoseLandmarker.create_from_options(options)
-        except (OSError, RuntimeError, ValueError) as error:
-            self._initialization_failed = True
-            self._logger.warning("Unable to initialize MediaPipe pose landmarker: %s", error)
-            return None
-        self._logger.info("MediaPipe pose landmarker initialized successfully")
-        return self._landmarker
+        delegates: list[tuple[str, Any | None]] = [("CPU", None)]
+        if self._settings.use_gpu_if_available and hasattr(mp.tasks.BaseOptions, "Delegate"):
+            delegates.insert(0, ("GPU", mp.tasks.BaseOptions.Delegate.GPU))
+
+        last_error: Exception | None = None
+        for delegate_name, delegate in delegates:
+            options = mp.tasks.vision.PoseLandmarkerOptions(
+                base_options=self._base_options(delegate),
+                running_mode=mp.tasks.vision.RunningMode.VIDEO,
+                num_poses=self._settings.num_poses,
+                min_pose_detection_confidence=self._settings.min_pose_detection_confidence,
+                min_pose_presence_confidence=self._settings.min_pose_presence_confidence,
+                min_tracking_confidence=self._settings.min_tracking_confidence,
+                output_segmentation_masks=False,
+            )
+            try:
+                self._landmarker = mp.tasks.vision.PoseLandmarker.create_from_options(options)
+                self._active_delegate_name = delegate_name
+                self._logger.info("MediaPipe pose landmarker initialized successfully using %s delegate", delegate_name)
+                return self._landmarker
+            except (OSError, RuntimeError, ValueError) as error:
+                last_error = error
+                self._logger.warning("Unable to initialize MediaPipe pose landmarker with %s delegate: %s", delegate_name, error)
+
+        self._initialization_failed = True
+        if last_error is not None:
+            self._logger.warning("Pose landmarker initialization failed after all delegate attempts: %s", last_error)
+        return None
+
+    def _base_options(self, delegate: Any | None):
+        kwargs: dict[str, Any] = {"model_asset_path": str(self._model_asset_path)}
+        if delegate is not None:
+            kwargs["delegate"] = delegate
+        return mp.tasks.BaseOptions(**kwargs)
 
     def _extract_pose_foot_state(self, landmarks: list[object], width: int, height: int) -> PoseFootState | None:
         left_foot, left_score = self._extract_weighted_foot_point(landmarks, (27, 29, 31), width, height)

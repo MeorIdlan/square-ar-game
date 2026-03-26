@@ -41,6 +41,11 @@ class PlayerTrackerService:
 
             if timestamp - player.last_seen_at > grace_period_seconds:
                 player.tracking_state = PlayerTrackingState.MISSING
+                player.standing_point = None
+                player.left_foot = None
+                player.right_foot = None
+                player.occupied_cell = None
+                player.confidence = 0.0
 
     def _find_best_match(
         self,
@@ -57,7 +62,7 @@ class PlayerTrackerService:
         for player_id in candidate_ids:
             player = players[player_id]
             if player.standing_point is None:
-                if player.tracking_state is PlayerTrackingState.UNKNOWN:
+                if player.tracking_state in (PlayerTrackingState.UNKNOWN, PlayerTrackingState.MISSING):
                     return player_id
                 continue
 
