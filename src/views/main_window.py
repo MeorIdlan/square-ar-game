@@ -64,6 +64,10 @@ class MainWindow(QMainWindow):
         self._camera_profile_combo.currentIndexChanged.connect(self._on_camera_profile_changed)
         controls_layout.addRow("Camera Mode", self._camera_profile_combo)
 
+        refresh_camera_modes_button = QPushButton("Refresh Camera Modes")
+        refresh_camera_modes_button.clicked.connect(self._refresh_camera_profile_choices)
+        controls_layout.addRow(refresh_camera_modes_button)
+
         self._display_combo = QComboBox()
         self._populate_display_choices()
         self._display_combo.currentIndexChanged.connect(self._on_display_changed)
@@ -234,11 +238,11 @@ class MainWindow(QMainWindow):
             self._camera_combo.setCurrentIndex(selected_index)
         self._camera_combo.blockSignals(False)
 
-    def _populate_camera_profile_choices(self) -> None:
+    def _populate_camera_profile_choices(self, probe: bool = False) -> None:
         current_profile = self._viewmodel.config.camera.profile
         self._camera_profile_combo.blockSignals(True)
         self._camera_profile_combo.clear()
-        for profile in self._viewmodel.available_camera_profiles():
+        for profile in self._viewmodel.available_camera_profiles(probe=probe):
             self._camera_profile_combo.addItem(profile.label, profile)
         selected_index = self._find_camera_profile_index(current_profile)
         if selected_index >= 0:
@@ -315,6 +319,9 @@ class MainWindow(QMainWindow):
         self._viewmodel.refresh_camera_sources()
         self._populate_camera_choices()
         self._populate_camera_profile_choices()
+
+    def _refresh_camera_profile_choices(self) -> None:
+        self._populate_camera_profile_choices(probe=True)
 
     def _reconnect_camera(self) -> None:
         self._viewmodel.reconnect_camera()

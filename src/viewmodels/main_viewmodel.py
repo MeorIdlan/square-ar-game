@@ -100,8 +100,8 @@ class MainViewModel(QObject):
     def available_camera_indices(self) -> list[int]:
         return self._camera_service.available_camera_indices()
 
-    def available_camera_profiles(self) -> list[CameraProfile]:
-        return self._camera_service.available_camera_profiles(self._config.camera.camera_index)
+    def available_camera_profiles(self, probe: bool = False) -> list[CameraProfile]:
+        return self._camera_service.available_camera_profiles(self._config.camera.camera_index, probe=probe)
 
     def update_camera_index(self, camera_index: int) -> None:
         self._config.camera.camera_index = camera_index

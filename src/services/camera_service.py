@@ -80,28 +80,41 @@ class CameraService:
         self.release()
         self.settings.apply_profile(profile)
 
-    def available_camera_profiles(self, camera_index: int | None = None) -> list[CameraProfile]:
+    def available_camera_profiles(self, camera_index: int | None = None, probe: bool = False) -> list[CameraProfile]:
         probe_index = self.settings.camera_index if camera_index is None else camera_index
         profiles: list[CameraProfile] = []
 
-        for profile in self.COMMON_PROFILES:
-            actual = self._probe_profile(probe_index, profile)
-            if actual is None:
-                continue
-            if actual.width == profile.width and actual.height == profile.height:
-                profiles.append(profile)
+        if probe:
+            for profile in self.COMMON_PROFILES:
+                actual = self._probe_profile(probe_index, profile)
+                if actual is None:
+                    continue
+                if actual.width == profile.width and actual.height == profile.height:
+                    profiles.append(profile)
+        else:
+            profiles.extend(self.COMMON_PROFILES)
 
         current_profile = self.settings.profile
         if current_profile not in profiles:
             profiles.append(current_profile)
 
-        unique_profiles = sorted({(profile.width, profile.height, profile.fps): profile for profile in profiles}.values(), key=lambda profile: (profile.width * profile.height, profile.fps))
-        self._logger.info(
-            "Detected %s camera profile(s) for camera index %s: %s",
-            len(unique_profiles),
-            probe_index,
-            ", ".join(profile.label for profile in unique_profiles),
+        unique_profiles = sorted(
+            {(profile.width, profile.height, profile.fps): profile for profile in profiles}.values(),
+            key=lambda profile: (profile.width * profile.height, profile.fps),
         )
+        if probe:
+            self._logger.info(
+                "Probed %s camera profile(s) for camera index %s: %s",
+                len(unique_profiles),
+                probe_index,
+                ", ".join(profile.label for profile in unique_profiles),
+            )
+        else:
+            self._logger.info(
+                "Loaded %s preset camera profile(s) for camera index %s",
+                len(unique_profiles),
+                probe_index,
+            )
         return unique_profiles
 
     def _probe_profile(self, camera_index: int, profile: CameraProfile) -> CameraProfile | None:
