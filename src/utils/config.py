@@ -33,12 +33,12 @@ class DisplaySettings:
 
 @dataclass(slots=True)
 class PoseSettings:
-    model_asset_path: str = "assets/models/pose_landmarker_lite.task"
+    model_asset_path: str = "assets/models/pose_landmarker_full.task"
     num_poses: int = 4
-    min_pose_detection_confidence: float = 0.5
-    min_pose_presence_confidence: float = 0.5
-    min_tracking_confidence: float = 0.5
-    min_landmark_visibility: float = 0.4
+    min_pose_detection_confidence: float = 0.35
+    min_pose_presence_confidence: float = 0.35
+    min_tracking_confidence: float = 0.35
+    min_landmark_visibility: float = 0.2
 
 
 @dataclass(slots=True)
@@ -66,10 +66,22 @@ class ConfigStore:
             return AppConfig()
 
         raw_data = json.loads(self._config_path.read_text(encoding="utf-8"))
+        pose_settings = PoseSettings(**raw_data.get("pose", {}))
+        if pose_settings.model_asset_path == "assets/models/pose_landmarker_lite.task":
+            pose_settings.model_asset_path = "assets/models/pose_landmarker_full.task"
+        if pose_settings.min_pose_detection_confidence == 0.5:
+            pose_settings.min_pose_detection_confidence = 0.35
+        if pose_settings.min_pose_presence_confidence == 0.5:
+            pose_settings.min_pose_presence_confidence = 0.35
+        if pose_settings.min_tracking_confidence == 0.5:
+            pose_settings.min_tracking_confidence = 0.35
+        if pose_settings.min_landmark_visibility == 0.4:
+            pose_settings.min_landmark_visibility = 0.2
+
         return AppConfig(
             camera=CameraSettings(**raw_data.get("camera", {})),
             display=DisplaySettings(**raw_data.get("display", {})),
-            pose=PoseSettings(**raw_data.get("pose", {})),
+            pose=pose_settings,
             grid=GridSettings(**raw_data.get("grid", {})),
             timings=RoundTimingSettings(**raw_data.get("timings", {})),
             aruco_dictionary=raw_data.get("aruco_dictionary", "DICT_6X6_1000"),

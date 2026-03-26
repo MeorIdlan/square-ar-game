@@ -116,6 +116,10 @@ class MainWindow(QMainWindow):
         self._camera_health_label.setWordWrap(True)
         controls_layout.addRow("Camera Health", self._camera_health_label)
 
+        self._pose_health_label = QLabel("Pose tracking idle")
+        self._pose_health_label.setWordWrap(True)
+        controls_layout.addRow("Pose Health", self._pose_health_label)
+
         self._display_health_label = QLabel("Projector not assigned")
         self._display_health_label.setWordWrap(True)
         controls_layout.addRow("Display Health", self._display_health_label)
@@ -183,6 +187,7 @@ class MainWindow(QMainWindow):
         self._timer_label.setText(f"{session_model.round_state.timer_remaining:0.1f}")
         self._calibration_state_label.setText(session_model.calibration.state.name)
         self._camera_health_label.setText(session_model.camera_status_message)
+        self._pose_health_label.setText(session_model.pose_status_message)
         self._display_health_label.setText(session_model.display_status_message)
         visible_ids = ", ".join(str(marker_id) for marker_id in session_model.calibration.detected_marker_ids) or "none"
         missing_ids = ", ".join(str(marker_id) for marker_id in session_model.calibration.missing_marker_ids) or "none"

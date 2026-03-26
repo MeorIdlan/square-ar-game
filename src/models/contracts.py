@@ -36,6 +36,8 @@ class PoseResult:
     frame_id: int
     timestamp: float = field(default_factory=monotonic)
     detections: list[PoseFootState] = field(default_factory=list)
+    raw_pose_count: int = 0
+    status_text: str = "Pose tracking idle"
 
 
 @dataclass(slots=True)
@@ -67,6 +69,7 @@ class RenderState:
     timer_text: str = "00.0"
     status_text: str = "Idle"
     camera_status_text: str = "Camera status unknown"
+    pose_status_text: str = "Pose tracking idle"
     calibration_status_text: str = "Not calibrated"
     display_status_text: str = "Projector not assigned"
     grid_cells: dict[CellIndex, CellState] = field(default_factory=dict)

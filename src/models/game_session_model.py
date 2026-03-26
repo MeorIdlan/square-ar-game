@@ -19,4 +19,5 @@ class GameSessionModel:
     winner_id: str | None = None
     status_message: str = "Booting"
     camera_status_message: str = "Waiting for camera frames"
+    pose_status_message: str = "Pose tracking idle"
     display_status_message: str = "Projector not assigned"

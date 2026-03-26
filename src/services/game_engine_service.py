@@ -273,6 +273,7 @@ class GameEngineService:
             timer_text=f"{session.round_state.timer_remaining:0.1f}",
             status_text=session.status_message,
             camera_status_text=session.camera_status_message,
+            pose_status_text=session.pose_status_message,
             calibration_status_text=session.calibration.validation_message,
             display_status_text=session.display_status_message,
             grid_cells=dict(session.grid.cell_states),

@@ -65,6 +65,7 @@ class MainViewModel(QObject):
         self._session_model.app_state = AppState.CAMERA_READY
         self._session_model.status_message = "Ready to calibrate"
         self._session_model.camera_status_message = "Waiting for camera frames"
+        self._session_model.pose_status_message = "Pose tracking idle"
         self._session_model.display_status_message = (
             f"Projector assigned to display {self._config.display.projector_screen_index}"
         )
@@ -214,10 +215,16 @@ class MainViewModel(QObject):
             self._session_model.round_state.timings.missed_detection_grace_seconds,
         )
 
+        mapped_count = sum(1 for detection in mapped_detections if detection.standing_point is not None)
+        in_bounds_count = sum(1 for detection in mapped_detections if detection.in_bounds)
+
         active_count = sum(
             1
             for player in self._session_model.players.values()
             if player.tracking_state is PlayerTrackingState.ACTIVE
+        )
+        self._session_model.pose_status_message = (
+            f"{pose_result.status_text} | mapped {mapped_count} | in bounds {in_bounds_count}"
         )
         self._session_model.status_message = f"Tracking {active_count} active player(s)"
 

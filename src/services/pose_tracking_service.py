@@ -22,11 +22,11 @@ class PoseTrackingService:
     def process_frame(self, frame_packet: FramePacket) -> PoseResult:
         frame = frame_packet.frame
         if frame is None:
-            return PoseResult(frame_id=frame_packet.frame_id)
+            return PoseResult(frame_id=frame_packet.frame_id, status_text="No frame available for pose tracking")
 
         landmarker = self._ensure_landmarker()
         if landmarker is None:
-            return PoseResult(frame_id=frame_packet.frame_id)
+            return PoseResult(frame_id=frame_packet.frame_id, status_text="Pose landmarker unavailable")
 
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
@@ -40,7 +40,21 @@ class PoseTrackingService:
             if foot_state is not None:
                 detections.append(foot_state)
 
-        return PoseResult(frame_id=frame_packet.frame_id, timestamp=frame_packet.timestamp, detections=detections)
+        raw_pose_count = len(pose_landmarks)
+        if raw_pose_count == 0:
+            status_text = "Pose detector found 0 bodies"
+        elif not detections:
+            status_text = f"Pose detector found {raw_pose_count} body(s), but foot landmarks were below visibility thresholds"
+        else:
+            status_text = f"Pose detector found {len(detections)} usable pose(s) from {raw_pose_count} body(s)"
+
+        return PoseResult(
+            frame_id=frame_packet.frame_id,
+            timestamp=frame_packet.timestamp,
+            detections=detections,
+            raw_pose_count=raw_pose_count,
+            status_text=status_text,
+        )
 
     def close(self) -> None:
         if self._landmarker is not None:
