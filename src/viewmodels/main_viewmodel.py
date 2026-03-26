@@ -12,7 +12,7 @@ from src.services.floor_mapping_service import FloorMappingService
 from src.services.game_engine_service import GameEngineService
 from src.services.player_tracker_service import PlayerTrackerService
 from src.services.calibration_service import CalibrationService
-from src.utils.config import AppConfig, ConfigStore
+from src.utils.config import AppConfig, CameraProfile, ConfigStore
 from src.viewmodels.calibration_viewmodel import CalibrationViewModel
 from src.viewmodels.debug_viewmodel import DebugViewModel
 from src.viewmodels.game_viewmodel import GameViewModel
@@ -100,12 +100,33 @@ class MainViewModel(QObject):
     def available_camera_indices(self) -> list[int]:
         return self._camera_service.available_camera_indices()
 
+    def available_camera_profiles(self) -> list[CameraProfile]:
+        return self._camera_service.available_camera_profiles(self._config.camera.camera_index)
+
     def update_camera_index(self, camera_index: int) -> None:
         self._config.camera.camera_index = camera_index
         self._camera_service.set_camera_index(camera_index)
         self._session_model.status_message = f"Switched to camera index {camera_index}"
-        self._session_model.camera_status_message = f"Camera {camera_index} selected. Waiting for live frames"
+        self._session_model.camera_status_message = (
+            f"Camera {camera_index} selected at {self._config.camera.profile.label}. Waiting for live frames"
+        )
         self._logger.info("Camera index updated to %s", camera_index)
+        self._publish_session(self._session_model)
+
+    def update_camera_profile(self, profile: CameraProfile) -> None:
+        self._config.camera.apply_profile(profile)
+        self._camera_service.set_camera_profile(profile)
+        self._session_model.status_message = f"Camera profile set to {profile.label}"
+        self._session_model.camera_status_message = (
+            f"Camera {self._config.camera.camera_index} selected at {profile.label}. Reconnect in progress"
+        )
+        if self._camera_service.reconnect():
+            self._session_model.status_message = f"Camera profile applied: {profile.label}"
+        else:
+            detail = self._camera_service.last_error_message or "Live camera feed unavailable."
+            self._session_model.camera_status_message = f"Fallback frame in use. {detail}"
+            self._session_model.status_message = f"Camera profile failed: {profile.label}"
+            self._logger.warning("Camera profile apply failed for %s: %s", profile.label, detail)
         self._publish_session(self._session_model)
 
     def refresh_camera_sources(self) -> list[int]:
@@ -193,7 +214,12 @@ class MainViewModel(QObject):
     def handle_frame_packet(self, frame_packet: FramePacket) -> None:
         self._latest_frame_packet = frame_packet
         if frame_packet.is_live:
-            self._session_model.camera_status_message = f"Camera {frame_packet.camera_index} live"
+            height = 0 if frame_packet.frame is None else frame_packet.frame.shape[0]
+            width = 0 if frame_packet.frame is None else frame_packet.frame.shape[1]
+            fps_text = ""
+            if frame_packet.actual_fps is not None and frame_packet.actual_fps > 0:
+                fps_text = f" @ {frame_packet.actual_fps:.1f} FPS"
+            self._session_model.camera_status_message = f"Camera {frame_packet.camera_index} live at {width}x{height}{fps_text}"
         else:
             detail = frame_packet.error_message or "Live camera feed unavailable."
             self._session_model.camera_status_message = f"Fallback frame in use. {detail}"

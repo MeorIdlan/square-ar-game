@@ -18,6 +18,7 @@ from PyQt6.QtWidgets import (
 
 from src.models.game_session_model import GameSessionModel
 from src.viewmodels.main_viewmodel import MainViewModel
+from src.utils.config import CameraProfile
 
 
 class MainWindow(QMainWindow):
@@ -57,6 +58,11 @@ class MainWindow(QMainWindow):
         reconnect_camera_button = QPushButton("Reconnect Camera")
         reconnect_camera_button.clicked.connect(self._reconnect_camera)
         controls_layout.addRow(reconnect_camera_button)
+
+        self._camera_profile_combo = QComboBox()
+        self._populate_camera_profile_choices()
+        self._camera_profile_combo.currentIndexChanged.connect(self._on_camera_profile_changed)
+        controls_layout.addRow("Camera Mode", self._camera_profile_combo)
 
         self._display_combo = QComboBox()
         self._populate_display_choices()
@@ -228,6 +234,24 @@ class MainWindow(QMainWindow):
             self._camera_combo.setCurrentIndex(selected_index)
         self._camera_combo.blockSignals(False)
 
+    def _populate_camera_profile_choices(self) -> None:
+        current_profile = self._viewmodel.config.camera.profile
+        self._camera_profile_combo.blockSignals(True)
+        self._camera_profile_combo.clear()
+        for profile in self._viewmodel.available_camera_profiles():
+            self._camera_profile_combo.addItem(profile.label, profile)
+        selected_index = self._find_camera_profile_index(current_profile)
+        if selected_index >= 0:
+            self._camera_profile_combo.setCurrentIndex(selected_index)
+        self._camera_profile_combo.blockSignals(False)
+
+    def _find_camera_profile_index(self, profile: CameraProfile) -> int:
+        for index in range(self._camera_profile_combo.count()):
+            item = self._camera_profile_combo.itemData(index)
+            if isinstance(item, CameraProfile) and item == profile:
+                return index
+        return -1
+
     def _populate_display_choices(self) -> None:
         current_index = self._viewmodel.config.display.projector_screen_index
         screen_count = len(QGuiApplication.screens())
@@ -264,6 +288,14 @@ class MainWindow(QMainWindow):
         camera_index = self._camera_combo.itemData(combo_index)
         if isinstance(camera_index, int):
             self._viewmodel.update_camera_index(camera_index)
+            self._populate_camera_profile_choices()
+
+    def _on_camera_profile_changed(self, combo_index: int) -> None:
+        if combo_index < 0:
+            return
+        profile = self._camera_profile_combo.itemData(combo_index)
+        if isinstance(profile, CameraProfile):
+            self._viewmodel.update_camera_profile(profile)
 
     def _on_display_changed(self, combo_index: int) -> None:
         if combo_index < 0:
@@ -282,6 +314,7 @@ class MainWindow(QMainWindow):
     def _refresh_camera_choices(self) -> None:
         self._viewmodel.refresh_camera_sources()
         self._populate_camera_choices()
+        self._populate_camera_profile_choices()
 
     def _reconnect_camera(self) -> None:
         self._viewmodel.reconnect_camera()

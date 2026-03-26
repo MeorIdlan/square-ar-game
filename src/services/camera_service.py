@@ -4,16 +4,26 @@ from dataclasses import dataclass
 import logging
 from pathlib import Path
 import sys
+from typing import ClassVar
 
 import cv2
 import numpy as np
 
 from src.models.contracts import FramePacket
-from src.utils.config import CameraSettings
+from src.utils.config import CameraProfile, CameraSettings
 
 
 @dataclass(slots=True)
 class CameraService:
+    COMMON_PROFILES: ClassVar[tuple[CameraProfile, ...]] = (
+        CameraProfile(1280, 720, 30),
+        CameraProfile(1280, 720, 60),
+        CameraProfile(1920, 1080, 30),
+        CameraProfile(1920, 1080, 60),
+        CameraProfile(2560, 1440, 30),
+        CameraProfile(3840, 2160, 30),
+    )
+
     settings: CameraSettings
     _frame_id: int = 0
     _capture: cv2.VideoCapture | None = None
@@ -21,6 +31,7 @@ class CameraService:
     _latest_frame: np.ndarray | None = None
     _last_error_message: str | None = None
     _is_live_source: bool = False
+    _last_reported_profile_label: str | None = None
 
     def __post_init__(self) -> None:
         self._logger = logging.getLogger(__name__)
@@ -49,6 +60,7 @@ class CameraService:
         capture.set(cv2.CAP_PROP_FPS, self.settings.target_fps)
         self._capture = capture
         self._last_error_message = None
+        self._last_reported_profile_label = None
         self._logger.info("Opened camera index %s", self.settings.camera_index)
         return True
 
@@ -58,6 +70,59 @@ class CameraService:
         self._logger.info("Switching camera index from %s to %s", self.settings.camera_index, camera_index)
         self.release()
         self.settings.camera_index = camera_index
+
+    def set_camera_profile(self, profile: CameraProfile) -> None:
+        requested_label = profile.label
+        current_profile = self.settings.profile
+        if current_profile == profile:
+            return
+        self._logger.info("Switching camera profile from %s to %s", current_profile.label, requested_label)
+        self.release()
+        self.settings.apply_profile(profile)
+
+    def available_camera_profiles(self, camera_index: int | None = None) -> list[CameraProfile]:
+        probe_index = self.settings.camera_index if camera_index is None else camera_index
+        profiles: list[CameraProfile] = []
+
+        for profile in self.COMMON_PROFILES:
+            actual = self._probe_profile(probe_index, profile)
+            if actual is None:
+                continue
+            if actual.width == profile.width and actual.height == profile.height:
+                profiles.append(profile)
+
+        current_profile = self.settings.profile
+        if current_profile not in profiles:
+            profiles.append(current_profile)
+
+        unique_profiles = sorted({(profile.width, profile.height, profile.fps): profile for profile in profiles}.values(), key=lambda profile: (profile.width * profile.height, profile.fps))
+        self._logger.info(
+            "Detected %s camera profile(s) for camera index %s: %s",
+            len(unique_profiles),
+            probe_index,
+            ", ".join(profile.label for profile in unique_profiles),
+        )
+        return unique_profiles
+
+    def _probe_profile(self, camera_index: int, profile: CameraProfile) -> CameraProfile | None:
+        probe = cv2.VideoCapture(camera_index)
+        if not probe.isOpened():
+            probe.release()
+            return None
+
+        probe.set(cv2.CAP_PROP_FRAME_WIDTH, profile.width)
+        probe.set(cv2.CAP_PROP_FRAME_HEIGHT, profile.height)
+        probe.set(cv2.CAP_PROP_FPS, profile.fps)
+        ok, frame = probe.read()
+        if not ok or frame is None:
+            probe.release()
+            return None
+
+        actual_width = int(round(probe.get(cv2.CAP_PROP_FRAME_WIDTH))) or frame.shape[1]
+        actual_height = int(round(probe.get(cv2.CAP_PROP_FRAME_HEIGHT))) or frame.shape[0]
+        actual_fps = int(round(probe.get(cv2.CAP_PROP_FPS))) or profile.fps
+        probe.release()
+        return CameraProfile(actual_width, actual_height, actual_fps)
 
     def available_camera_indices(self, max_index: int = 5) -> list[int]:
         if sys.platform.startswith("linux"):
@@ -120,6 +185,10 @@ class CameraService:
                 self._last_error_message = None
                 if not self._is_live_source:
                     self._logger.info("Camera index %s is now delivering live frames", self.settings.camera_index)
+                actual_profile = self._frame_profile(frame)
+                if actual_profile.label != self._last_reported_profile_label:
+                    self._logger.info("Camera index %s active stream profile %s", self.settings.camera_index, actual_profile.label)
+                    self._last_reported_profile_label = actual_profile.label
                 self._is_live_source = True
                 return FramePacket(
                     frame_id=self._frame_id,
@@ -127,6 +196,7 @@ class CameraService:
                     camera_index=self.settings.camera_index,
                     is_live=True,
                     source_name="camera",
+                    actual_fps=self._capture.get(cv2.CAP_PROP_FPS) if self._capture is not None else None,
                 )
 
             self._last_error_message = f"Camera read failed for camera index {self.settings.camera_index}."
@@ -145,7 +215,12 @@ class CameraService:
             is_live=False,
             source_name="fallback",
             error_message=self._last_error_message or "Live camera feed unavailable.",
+            actual_fps=float(self.settings.target_fps),
         )
+
+    @staticmethod
+    def _frame_profile(frame: np.ndarray) -> CameraProfile:
+        return CameraProfile(width=int(frame.shape[1]), height=int(frame.shape[0]), fps=0)
 
     def _fallback_frame(self) -> np.ndarray:
         height = self.settings.frame_height

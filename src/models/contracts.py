@@ -21,6 +21,7 @@ class FramePacket:
     is_live: bool = False
     source_name: str = "fallback"
     error_message: str | None = None
+    actual_fps: float | None = None
 
 
 @dataclass(slots=True)

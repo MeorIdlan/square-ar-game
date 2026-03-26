@@ -8,6 +8,19 @@ from pathlib import Path
 from src.models.round_model import RoundTimingSettings
 
 
+@dataclass(frozen=True, slots=True)
+class CameraProfile:
+    width: int
+    height: int
+    fps: int
+
+    @property
+    def label(self) -> str:
+        if self.width >= 3840 and self.height >= 2160:
+            return f"4K {self.fps} FPS"
+        return f"{self.height}p {self.fps} FPS ({self.width}x{self.height})"
+
+
 @dataclass(slots=True)
 class GridSettings:
     rows: int = 4
@@ -23,6 +36,15 @@ class CameraSettings:
     frame_width: int = 1280
     frame_height: int = 720
     target_fps: int = 30
+
+    @property
+    def profile(self) -> CameraProfile:
+        return CameraProfile(width=self.frame_width, height=self.frame_height, fps=self.target_fps)
+
+    def apply_profile(self, profile: CameraProfile) -> None:
+        self.frame_width = profile.width
+        self.frame_height = profile.height
+        self.target_fps = profile.fps
 
 
 @dataclass(slots=True)
