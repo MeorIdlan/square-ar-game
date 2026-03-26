@@ -91,6 +91,7 @@ def build_application() -> BootstrapContext:
         projector_viewmodel=projector_viewmodel,
         debug_viewmodel=debug_viewmodel,
         camera_service=camera_service,
+        pose_tracking_service=pose_tracking_service,
         floor_mapping_service=floor_mapping_service,
         game_engine_service=game_engine_service,
         player_tracker_service=player_tracker_service,
@@ -109,6 +110,7 @@ def build_application() -> BootstrapContext:
     camera_worker.frame_ready.connect(main_viewmodel.handle_frame_packet)
     camera_worker.frame_ready.connect(vision_worker.process_frame)
     vision_worker.pose_ready.connect(main_viewmodel.handle_pose_result)
+    main_viewmodel.camera_capture_interval_changed.connect(camera_worker.set_interval)
     app.aboutToQuit.connect(camera_worker.stop)
     app.aboutToQuit.connect(lambda: camera_service.release())
     app.aboutToQuit.connect(lambda: pose_tracking_service.close())

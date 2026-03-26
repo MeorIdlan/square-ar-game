@@ -6,15 +6,17 @@ import sys
 
 def application_root() -> Path:
     if getattr(sys, "frozen", False):
+        meipass = getattr(sys, "_MEIPASS", None)
+        if meipass:
+            return Path(meipass).resolve()
         return Path(sys.executable).resolve().parent
     return Path(__file__).resolve().parents[2]
 
 
 def internal_runtime_root() -> Path:
-    root = application_root()
     if getattr(sys, "frozen", False):
-        return root / "_internal"
-    return root
+        return Path(sys.executable).resolve().parent / "_internal"
+    return application_root()
 
 
 def log_directory() -> Path:

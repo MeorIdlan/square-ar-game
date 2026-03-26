@@ -19,6 +19,7 @@ class PoseTrackingService:
         self._landmarker: object | None = None
         self._initialization_failed = False
         self._last_status_text: str | None = None
+        self._missing_model_logged = False
         self._logger.info(
             "Pose tracking initialized model=%s num_poses=%s thresholds=(detect=%s presence=%s tracking=%s landmark=%s)",
             self._model_asset_path,
@@ -28,6 +29,20 @@ class PoseTrackingService:
             self._settings.min_tracking_confidence,
             self._settings.min_landmark_visibility,
         )
+
+    @property
+    def model_asset_path(self) -> Path:
+        return self._model_asset_path
+
+    def set_model_asset_path(self, model_asset_path: Path) -> None:
+        if self._model_asset_path == model_asset_path:
+            return
+        self.close()
+        self._model_asset_path = model_asset_path
+        self._initialization_failed = False
+        self._last_status_text = None
+        self._missing_model_logged = False
+        self._logger.info("Pose model switched to %s", self._model_asset_path)
 
     def process_frame(self, frame_packet: FramePacket) -> PoseResult:
         frame = frame_packet.frame
@@ -83,7 +98,10 @@ class PoseTrackingService:
             return self._landmarker
 
         if not self._model_asset_path.exists():
-            self._logger.warning("Pose model asset not found at %s", self._model_asset_path)
+            if not self._missing_model_logged:
+                self._logger.warning("Pose model asset not found at %s", self._model_asset_path)
+                self._missing_model_logged = True
+            self._initialization_failed = True
             return None
 
         options = mp.tasks.vision.PoseLandmarkerOptions(

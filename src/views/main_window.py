@@ -82,6 +82,11 @@ class MainWindow(QMainWindow):
         self._aruco_dictionary_combo.currentIndexChanged.connect(self._on_aruco_dictionary_changed)
         controls_layout.addRow("ArUco Dictionary", self._aruco_dictionary_combo)
 
+        self._pose_model_combo = QComboBox()
+        self._populate_pose_model_choices()
+        self._pose_model_combo.currentIndexChanged.connect(self._on_pose_model_changed)
+        controls_layout.addRow("Pose Model", self._pose_model_combo)
+
         calibrate_button = QPushButton("Calibrate")
         calibrate_button.clicked.connect(self._viewmodel.calibrate)
         controls_layout.addRow(calibrate_button)
@@ -286,6 +291,17 @@ class MainWindow(QMainWindow):
             self._aruco_dictionary_combo.setCurrentIndex(selected_index)
         self._aruco_dictionary_combo.blockSignals(False)
 
+    def _populate_pose_model_choices(self) -> None:
+        current_value = self._viewmodel.current_pose_model_path()
+        self._pose_model_combo.blockSignals(True)
+        self._pose_model_combo.clear()
+        for label, model_path in self._viewmodel.supported_pose_models():
+            self._pose_model_combo.addItem(label, model_path)
+        selected_index = self._pose_model_combo.findData(current_value)
+        if selected_index >= 0:
+            self._pose_model_combo.setCurrentIndex(selected_index)
+        self._pose_model_combo.blockSignals(False)
+
     def _on_camera_changed(self, combo_index: int) -> None:
         if combo_index < 0:
             return
@@ -314,6 +330,13 @@ class MainWindow(QMainWindow):
         dictionary_name = self._aruco_dictionary_combo.itemData(combo_index)
         if isinstance(dictionary_name, str):
             self._viewmodel.update_aruco_dictionary(dictionary_name)
+
+    def _on_pose_model_changed(self, combo_index: int) -> None:
+        if combo_index < 0:
+            return
+        model_path = self._pose_model_combo.itemData(combo_index)
+        if isinstance(model_path, str):
+            self._viewmodel.update_pose_model(model_path)
 
     def _refresh_camera_choices(self) -> None:
         self._viewmodel.refresh_camera_sources()

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 from PyQt6.QtCore import QObject, pyqtSignal
 
@@ -12,7 +13,9 @@ from src.services.floor_mapping_service import FloorMappingService
 from src.services.game_engine_service import GameEngineService
 from src.services.player_tracker_service import PlayerTrackerService
 from src.services.calibration_service import CalibrationService
-from src.utils.config import AppConfig, CameraProfile, ConfigStore
+from src.services.pose_tracking_service import PoseTrackingService
+from src.utils.app_paths import application_root
+from src.utils.config import AppConfig, CameraProfile, ConfigStore, POSE_MODEL_OPTIONS
 from src.viewmodels.calibration_viewmodel import CalibrationViewModel
 from src.viewmodels.debug_viewmodel import DebugViewModel
 from src.viewmodels.game_viewmodel import GameViewModel
@@ -23,6 +26,7 @@ class MainViewModel(QObject):
     status_changed = pyqtSignal(str)
     session_changed = pyqtSignal(object)
     projector_screen_changed = pyqtSignal(int)
+    camera_capture_interval_changed = pyqtSignal(int)
 
     def __init__(
         self,
@@ -34,6 +38,7 @@ class MainViewModel(QObject):
         projector_viewmodel: ProjectorViewModel,
         debug_viewmodel: DebugViewModel,
         camera_service: CameraService,
+        pose_tracking_service: PoseTrackingService,
         floor_mapping_service: FloorMappingService,
         game_engine_service: GameEngineService,
         player_tracker_service: PlayerTrackerService,
@@ -48,6 +53,7 @@ class MainViewModel(QObject):
         self.projector_viewmodel = projector_viewmodel
         self.debug_viewmodel = debug_viewmodel
         self._camera_service = camera_service
+        self._pose_tracking_service = pose_tracking_service
         self._floor_mapping_service = floor_mapping_service
         self._game_engine_service = game_engine_service
         self._player_tracker_service = player_tracker_service
@@ -74,6 +80,7 @@ class MainViewModel(QObject):
             f"Projector assigned to display {self._config.display.projector_screen_index}"
         )
         self.projector_screen_changed.emit(self._config.display.projector_screen_index)
+        self.camera_capture_interval_changed.emit(self._target_interval_ms())
         self._logger.info("Main viewmodel initialization complete")
         self._publish_session(self._session_model)
 
@@ -88,6 +95,35 @@ class MainViewModel(QObject):
 
     def supported_aruco_dictionaries(self) -> list[str]:
         return CalibrationService.supported_dictionary_names()
+
+    def supported_pose_models(self) -> list[tuple[str, str]]:
+        root = application_root()
+        supported: list[tuple[str, str]] = []
+        for label, relative_path in POSE_MODEL_OPTIONS.items():
+            candidate = Path(relative_path)
+            if not candidate.is_absolute():
+                candidate = root / candidate
+            if candidate.exists() or self._config.pose.model_asset_path == relative_path:
+                supported.append((label, relative_path))
+        return supported
+
+    def current_pose_model_path(self) -> str:
+        return self._config.pose.model_asset_path
+
+    def update_pose_model(self, model_asset_path: str) -> None:
+        if self._config.pose.model_asset_path == model_asset_path:
+            return
+
+        resolved_path = Path(model_asset_path)
+        if not resolved_path.is_absolute():
+            resolved_path = application_root() / resolved_path
+
+        self._config.pose.model_asset_path = model_asset_path
+        self._pose_tracking_service.set_model_asset_path(resolved_path)
+        self._session_model.pose_status_message = f"Pose model switched to {resolved_path.name}"
+        self._session_model.status_message = f"Pose model set to {resolved_path.name}"
+        self._logger.info("Pose model updated to %s", model_asset_path)
+        self._publish_session(self._session_model)
 
     def update_aruco_dictionary(self, dictionary_name: str) -> None:
         if dictionary_name not in CalibrationService.supported_dictionary_names():
@@ -116,6 +152,7 @@ class MainViewModel(QObject):
     def update_camera_profile(self, profile: CameraProfile) -> None:
         self._config.camera.apply_profile(profile)
         self._camera_service.set_camera_profile(profile)
+        self.camera_capture_interval_changed.emit(self._target_interval_ms())
         self._session_model.status_message = f"Camera profile set to {profile.label}"
         self._session_model.camera_status_message = (
             f"Camera {self._config.camera.camera_index} selected at {profile.label}. Reconnect in progress"
@@ -128,6 +165,9 @@ class MainViewModel(QObject):
             self._session_model.status_message = f"Camera profile failed: {profile.label}"
             self._logger.warning("Camera profile apply failed for %s: %s", profile.label, detail)
         self._publish_session(self._session_model)
+
+    def _target_interval_ms(self) -> int:
+        return max(1, int(round(1000 / max(self._config.camera.target_fps, 1))))
 
     def refresh_camera_sources(self) -> list[int]:
         indices = self._camera_service.available_camera_indices()

@@ -64,6 +64,13 @@ class PoseSettings:
     min_landmark_visibility: float = 0.2
 
 
+POSE_MODEL_OPTIONS: dict[str, str] = {
+    "Pose Landmarker Lite": "assets/models/pose_landmarker_lite.task",
+    "Pose Landmarker Full": "assets/models/pose_landmarker_full.task",
+    "Pose Landmarker Heavy": "assets/models/pose_landmarker_heavy.task",
+}
+
+
 @dataclass(slots=True)
 class AppConfig:
     camera: CameraSettings = field(default_factory=CameraSettings)
@@ -92,8 +99,6 @@ class ConfigStore:
 
         raw_data = json.loads(self._config_path.read_text(encoding="utf-8"))
         pose_settings = PoseSettings(**raw_data.get("pose", {}))
-        if pose_settings.model_asset_path == "assets/models/pose_landmarker_lite.task":
-            pose_settings.model_asset_path = "assets/models/pose_landmarker_full.task"
         if pose_settings.min_pose_detection_confidence == 0.5:
             pose_settings.min_pose_detection_confidence = 0.35
         if pose_settings.min_pose_presence_confidence == 0.5:

@@ -18,6 +18,12 @@ class CameraWorker(QObject):
     def start(self, interval_ms: int) -> None:
         self._timer.start(interval_ms)
 
+    def set_interval(self, interval_ms: int) -> None:
+        was_active = self._timer.isActive()
+        self._timer.setInterval(interval_ms)
+        if was_active and not self._timer.isActive():
+            self._timer.start(interval_ms)
+
     def stop(self) -> None:
         self._timer.stop()
 
