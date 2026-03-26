@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
 from pathlib import Path
 
 from PyQt6.QtWidgets import QApplication
@@ -41,12 +42,22 @@ class BootstrapContext:
 
 
 def build_application() -> BootstrapContext:
-    configure_logging()
+    log_file_path = configure_logging()
+    logger = logging.getLogger(__name__)
     app = QApplication.instance() or QApplication([])
     project_root = application_root()
+    logger.info("Building application from root %s", project_root)
+    logger.info("Active log file: %s", log_file_path)
 
     config_store = ConfigStore()
     config = config_store.load()
+    logger.info(
+        "Configuration loaded: camera=%s display=%s aruco=%s pose_model=%s",
+        config.camera.camera_index,
+        config.display.projector_screen_index,
+        config.aruco_dictionary,
+        config.pose.model_asset_path,
+    )
     session_model = GameSessionModel()
     session_model.grid.rows = config.grid.rows
     session_model.grid.columns = config.grid.columns
@@ -59,6 +70,7 @@ def build_application() -> BootstrapContext:
     pose_model_path = Path(config.pose.model_asset_path)
     if not pose_model_path.is_absolute():
         pose_model_path = project_root / pose_model_path
+    logger.info("Resolved pose model path to %s", pose_model_path)
     pose_tracking_service = PoseTrackingService(config.pose, pose_model_path)
     floor_mapping_service = FloorMappingService()
     game_engine_service = GameEngineService()
@@ -103,6 +115,7 @@ def build_application() -> BootstrapContext:
 
     main_viewmodel.initialize()
     camera_worker.start(interval_ms=max(1, int(1000 / max(config.camera.target_fps, 1))))
+    logger.info("Camera worker started at target fps=%s", config.camera.target_fps)
 
     return BootstrapContext(
         app=app,

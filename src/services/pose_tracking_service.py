@@ -18,6 +18,16 @@ class PoseTrackingService:
         self._logger = logging.getLogger(__name__)
         self._landmarker: object | None = None
         self._initialization_failed = False
+        self._last_status_text: str | None = None
+        self._logger.info(
+            "Pose tracking initialized model=%s num_poses=%s thresholds=(detect=%s presence=%s tracking=%s landmark=%s)",
+            self._model_asset_path,
+            self._settings.num_poses,
+            self._settings.min_pose_detection_confidence,
+            self._settings.min_pose_presence_confidence,
+            self._settings.min_tracking_confidence,
+            self._settings.min_landmark_visibility,
+        )
 
     def process_frame(self, frame_packet: FramePacket) -> PoseResult:
         frame = frame_packet.frame
@@ -47,6 +57,10 @@ class PoseTrackingService:
             status_text = f"Pose detector found {raw_pose_count} body(s), but foot landmarks were below visibility thresholds"
         else:
             status_text = f"Pose detector found {len(detections)} usable pose(s) from {raw_pose_count} body(s)"
+
+        if status_text != self._last_status_text:
+            self._logger.info("%s", status_text)
+            self._last_status_text = status_text
 
         return PoseResult(
             frame_id=frame_packet.frame_id,
@@ -87,6 +101,7 @@ class PoseTrackingService:
             self._initialization_failed = True
             self._logger.warning("Unable to initialize MediaPipe pose landmarker: %s", error)
             return None
+        self._logger.info("MediaPipe pose landmarker initialized successfully")
         return self._landmarker
 
     def _extract_pose_foot_state(self, landmarks: list[object], width: int, height: int) -> PoseFootState | None:

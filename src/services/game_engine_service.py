@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from random import Random
 
 from src.models.contracts import MappedPlayerState, RenderPlayerState, RenderState
@@ -10,6 +11,7 @@ from src.models.game_session_model import GameSessionModel
 class GameEngineService:
     def __init__(self, seed: int | None = None) -> None:
         self._random = Random(seed)
+        self._logger = logging.getLogger(__name__)
 
     def start_round(self, session: GameSessionModel) -> None:
         active_candidates = [
@@ -21,6 +23,7 @@ class GameEngineService:
             session.round_state.phase = RoundPhase.IDLE
             session.round_state.timer_remaining = 0.0
             session.status_message = "No active participants in valid cells"
+            self._logger.warning("Round start rejected because there are no active participants in valid cells")
             return
 
         if len(active_candidates) == 1:
@@ -29,6 +32,7 @@ class GameEngineService:
             session.round_state.phase = RoundPhase.FINISHED
             session.round_state.timer_remaining = 0.0
             session.status_message = f"Winner: {session.winner_id}"
+            self._logger.info("Round start immediately finished with winner %s", session.winner_id)
             return
 
         round_state = session.round_state
@@ -51,6 +55,7 @@ class GameEngineService:
         session.app_state = AppState.RUNNING
         self.randomize_flashing_pattern(session)
         session.status_message = f"Round {round_state.round_number} flashing"
+        self._logger.info("Round %s started with participants=%s", round_state.round_number, round_state.participant_ids)
 
     def randomize_flashing_pattern(self, session: GameSessionModel) -> None:
         for cell_index in session.grid.cell_states:
@@ -62,16 +67,19 @@ class GameEngineService:
         for cell_index in session.grid.cell_states:
             session.grid.cell_states[cell_index] = self._random.choice((CellState.GREEN, CellState.RED))
         session.status_message = f"Round {session.round_state.round_number} locked"
+        self._logger.info("Round %s locked", session.round_state.round_number)
 
     def begin_check(self, session: GameSessionModel) -> None:
         session.round_state.phase = RoundPhase.CHECKING
         session.round_state.timer_remaining = session.round_state.timings.lock_delay_seconds
         session.status_message = f"Round {session.round_state.round_number} checking positions"
+        self._logger.info("Round %s checking positions", session.round_state.round_number)
 
     def begin_preparing_next_round(self, session: GameSessionModel) -> None:
         session.round_state.phase = RoundPhase.PREPARING
         session.round_state.timer_remaining = session.round_state.timings.inter_round_delay_seconds
         session.status_message = f"Next round in {session.round_state.timer_remaining:0.1f}s"
+        self._logger.info("Preparing next round after round %s", session.round_state.round_number)
 
     def tick(self, session: GameSessionModel, delta_seconds: float) -> None:
         round_state = session.round_state
@@ -166,6 +174,12 @@ class GameEngineService:
                 round_state.survivor_ids.append(participant_id)
 
         self._refresh_round_outcome(session)
+        self._logger.info(
+            "Round %s evaluated survivors=%s eliminated=%s",
+            round_state.round_number,
+            round_state.survivor_ids,
+            round_state.eliminated_ids,
+        )
 
     def revive_player(self, session: GameSessionModel, player_id: str) -> None:
         player = session.players.get(player_id)
@@ -218,6 +232,7 @@ class GameEngineService:
             player.eliminated_in_round = False
             if player.tracking_state is PlayerTrackingState.ELIMINATED:
                 player.tracking_state = PlayerTrackingState.MISSING
+        self._logger.info("Session reset")
 
     def force_next_round(self, session: GameSessionModel) -> None:
         self.start_round(session)

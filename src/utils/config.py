@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 import json
+import logging
 from pathlib import Path
 
 from src.models.round_model import RoundTimingSettings
@@ -56,6 +57,7 @@ class ConfigStore:
     def __init__(self, config_path: Path | None = None) -> None:
         self._config_path = config_path or Path.home() / ".square-ar-game" / "settings.json"
         self._config_path.parent.mkdir(parents=True, exist_ok=True)
+        self._logger = logging.getLogger(__name__)
 
     @property
     def config_path(self) -> Path:
@@ -63,6 +65,7 @@ class ConfigStore:
 
     def load(self) -> AppConfig:
         if not self._config_path.exists():
+            self._logger.info("Config file not found at %s; using defaults", self._config_path)
             return AppConfig()
 
         raw_data = json.loads(self._config_path.read_text(encoding="utf-8"))
@@ -78,7 +81,7 @@ class ConfigStore:
         if pose_settings.min_landmark_visibility == 0.4:
             pose_settings.min_landmark_visibility = 0.2
 
-        return AppConfig(
+        config = AppConfig(
             camera=CameraSettings(**raw_data.get("camera", {})),
             display=DisplaySettings(**raw_data.get("display", {})),
             pose=pose_settings,
@@ -87,7 +90,10 @@ class ConfigStore:
             aruco_dictionary=raw_data.get("aruco_dictionary", "DICT_6X6_1000"),
             marker_ids=raw_data.get("marker_ids", [0, 1, 2, 3]),
         )
+        self._logger.info("Loaded config from %s", self._config_path)
+        return config
 
     def save(self, config: AppConfig) -> None:
         payload = asdict(config)
         self._config_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        self._logger.info("Saved config to %s", self._config_path)

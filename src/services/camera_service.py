@@ -20,9 +20,17 @@ class CameraService:
     _logger: logging.Logger | None = None
     _latest_frame: np.ndarray | None = None
     _last_error_message: str | None = None
+    _is_live_source: bool = False
 
     def __post_init__(self) -> None:
         self._logger = logging.getLogger(__name__)
+        self._logger.info(
+            "Camera service initialized index=%s resolution=%sx%s fps=%s",
+            self.settings.camera_index,
+            self.settings.frame_width,
+            self.settings.frame_height,
+            self.settings.target_fps,
+        )
 
     def open(self) -> bool:
         if self._capture is not None and self._capture.isOpened():
@@ -41,11 +49,13 @@ class CameraService:
         capture.set(cv2.CAP_PROP_FPS, self.settings.target_fps)
         self._capture = capture
         self._last_error_message = None
+        self._logger.info("Opened camera index %s", self.settings.camera_index)
         return True
 
     def set_camera_index(self, camera_index: int) -> None:
         if camera_index == self.settings.camera_index:
             return
+        self._logger.info("Switching camera index from %s to %s", self.settings.camera_index, camera_index)
         self.release()
         self.settings.camera_index = camera_index
 
@@ -82,9 +92,12 @@ class CameraService:
     def release(self) -> None:
         if self._capture is not None:
             self._capture.release()
+            self._logger.info("Released camera index %s", self.settings.camera_index)
         self._capture = None
+        self._is_live_source = False
 
     def reconnect(self) -> bool:
+        self._logger.info("Reconnect requested for camera index %s", self.settings.camera_index)
         self.release()
         return self.open()
 
@@ -105,6 +118,9 @@ class CameraService:
                 self._frame_id += 1
                 self._latest_frame = frame.copy()
                 self._last_error_message = None
+                if not self._is_live_source:
+                    self._logger.info("Camera index %s is now delivering live frames", self.settings.camera_index)
+                self._is_live_source = True
                 return FramePacket(
                     frame_id=self._frame_id,
                     frame=frame,
@@ -119,6 +135,9 @@ class CameraService:
         frame = self._fallback_frame()
         self._frame_id += 1
         self._latest_frame = frame.copy()
+        if self._is_live_source:
+            self._logger.warning("Camera index %s lost live frames; switching to fallback", self.settings.camera_index)
+        self._is_live_source = False
         return FramePacket(
             frame_id=self._frame_id,
             frame=frame,

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from PyQt6.QtCore import QObject, pyqtSignal
 
 from src.models.contracts import FramePacket, MappedPlayerState, PoseResult
@@ -37,6 +39,7 @@ class MainViewModel(QObject):
         player_tracker_service: PlayerTrackerService,
     ) -> None:
         super().__init__()
+        self._logger = logging.getLogger(__name__)
         self._config = config
         self._config_store = config_store
         self._session_model = session_model
@@ -52,6 +55,7 @@ class MainViewModel(QObject):
 
         self.calibration_viewmodel.calibration_updated.connect(self._on_calibration_updated)
         self.game_viewmodel.session_updated.connect(self._publish_session)
+        self._logger.info("Main viewmodel initialized")
 
     @property
     def config(self) -> AppConfig:
@@ -70,6 +74,7 @@ class MainViewModel(QObject):
             f"Projector assigned to display {self._config.display.projector_screen_index}"
         )
         self.projector_screen_changed.emit(self._config.display.projector_screen_index)
+        self._logger.info("Main viewmodel initialization complete")
         self._publish_session(self._session_model)
 
     def calibrate(self) -> None:
@@ -89,6 +94,7 @@ class MainViewModel(QObject):
             return
         self._config.aruco_dictionary = dictionary_name
         self._session_model.status_message = f"ArUco dictionary set to {dictionary_name}"
+        self._logger.info("ArUco dictionary updated to %s", dictionary_name)
         self._publish_session(self._session_model)
 
     def available_camera_indices(self) -> list[int]:
@@ -99,6 +105,7 @@ class MainViewModel(QObject):
         self._camera_service.set_camera_index(camera_index)
         self._session_model.status_message = f"Switched to camera index {camera_index}"
         self._session_model.camera_status_message = f"Camera {camera_index} selected. Waiting for live frames"
+        self._logger.info("Camera index updated to %s", camera_index)
         self._publish_session(self._session_model)
 
     def refresh_camera_sources(self) -> list[int]:
@@ -120,6 +127,7 @@ class MainViewModel(QObject):
             detail = self._camera_service.last_error_message or "Live camera feed unavailable."
             self._session_model.camera_status_message = f"Fallback frame in use. {detail}"
             self._session_model.status_message = f"Reconnect failed for camera {self._config.camera.camera_index}"
+            self._logger.warning("Camera reconnect failed: %s", detail)
         self._publish_session(self._session_model)
 
     def update_display_probe(self, screen_count: int) -> None:
@@ -134,6 +142,7 @@ class MainViewModel(QObject):
         self.projector_screen_changed.emit(screen_index)
         self._session_model.status_message = f"Projector assigned to display {screen_index}"
         self._session_model.display_status_message = f"Projector assigned to display {screen_index}"
+        self._logger.info("Projector screen updated to %s", screen_index)
         self._publish_session(self._session_model)
 
     def start_round(self) -> None:
@@ -179,6 +188,7 @@ class MainViewModel(QObject):
     def save_config(self) -> None:
         self._config_store.save(self._config)
         self.status_changed.emit(f"Saved settings to {self._config_store.config_path}")
+        self._logger.info("Save settings requested")
 
     def handle_frame_packet(self, frame_packet: FramePacket) -> None:
         self._latest_frame_packet = frame_packet
@@ -234,6 +244,7 @@ class MainViewModel(QObject):
         self._session_model.calibration = calibration_model
         self._session_model.app_state = AppState.CALIBRATED if calibration_model.is_valid else AppState.CAMERA_READY
         self._session_model.status_message = calibration_model.validation_message
+        self._logger.info("Calibration update applied valid=%s", calibration_model.is_valid)
         self._publish_session(self._session_model)
 
     def _publish_session(self, session_model: GameSessionModel) -> None:

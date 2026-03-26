@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from typing import Iterable
+import logging
 
 import cv2
 import numpy as np
@@ -34,6 +35,7 @@ class CalibrationService:
     def __init__(self, config: AppConfig) -> None:
         self._config = config
         self._detector_parameters = cv2.aruco.DetectorParameters()
+        self._logger = logging.getLogger(__name__)
 
     @classmethod
     def supported_dictionary_names(cls) -> list[str]:
@@ -58,6 +60,7 @@ class CalibrationService:
         source_error: str | None = None,
     ) -> CalibrationModel:
         if frame is None:
+            self._logger.warning("Calibration requested without a camera frame")
             return replace(
                 model,
                 state=CalibrationState.INVALID,
@@ -70,6 +73,7 @@ class CalibrationService:
 
         if not is_live_source:
             detail = source_error or "Live camera feed unavailable."
+            self._logger.warning("Calibration rejected because live camera is unavailable: %s", detail)
             return replace(
                 model,
                 state=CalibrationState.INVALID,
@@ -84,6 +88,7 @@ class CalibrationService:
             )
 
         detected_markers = self.detect_markers(frame)
+        self._logger.info("Calibration marker detection found %s marker(s)", len(detected_markers))
         return self.calibrate_from_detected_markers(model, detected_markers)
 
     def reset(self, model: CalibrationModel) -> CalibrationModel:
@@ -129,6 +134,7 @@ class CalibrationService:
         required_ids = tuple(self._config.marker_ids)
         missing_ids = [marker_id for marker_id in required_ids if marker_id not in detected_markers]
         if missing_ids:
+            self._logger.warning("Calibration missing marker ids: %s", missing_ids)
             return replace(
                 model,
                 state=CalibrationState.INVALID,
@@ -143,6 +149,7 @@ class CalibrationService:
             )
 
         if not self._is_rectangle_valid(outer) or not self._is_rectangle_valid(inner):
+            self._logger.error("Calibration rejected because configured playable rectangle is invalid")
             return replace(
                 model,
                 state=CalibrationState.INVALID,
@@ -160,6 +167,7 @@ class CalibrationService:
         world_points = np.array(outer, dtype=np.float32)
 
         if not self._is_quadrilateral_convex(image_points):
+            self._logger.warning("Calibration rejected because detected markers are not convex")
             return replace(
                 model,
                 state=CalibrationState.INVALID,
@@ -172,6 +180,7 @@ class CalibrationService:
 
         homography, mask = cv2.findHomography(image_points, world_points, method=0)
         if homography is None or mask is None:
+            self._logger.error("Calibration failed because homography computation returned no result")
             return replace(
                 model,
                 state=CalibrationState.INVALID,
@@ -184,6 +193,7 @@ class CalibrationService:
 
         reprojection_error = self._mean_reprojection_error(homography, image_points, world_points)
         if not np.isfinite(reprojection_error) or reprojection_error > 0.15:
+            self._logger.warning("Calibration rejected due to reprojection error %.3f", reprojection_error)
             return replace(
                 model,
                 state=CalibrationState.INVALID,
@@ -194,6 +204,7 @@ class CalibrationService:
                 validation_message=f"Calibration rejected due to reprojection error ({reprojection_error:.3f}).",
             )
 
+        self._logger.info("Calibration succeeded with dictionary %s", self._dictionary_name())
         return replace(
             model,
             state=CalibrationState.VALID,
