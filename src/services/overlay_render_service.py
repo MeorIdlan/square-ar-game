@@ -110,21 +110,39 @@ class OverlayRenderService:
         painter.drawEllipse(QPointF(float(projected[0]), float(projected[1])), radius, radius)
 
     def _draw_hud(self, painter: QPainter, render_state: RenderState, width: int, height: int) -> None:
-        painter.setPen(QColor("white"))
         painter.setFont(QFont("Sans Serif", 14))
-        painter.drawText(24, 36, f"Status: {render_state.status_text}")
-        painter.drawText(24, 64, f"Phase: {render_state.phase.name}")
-        painter.drawText(24, 92, f"Timer: {render_state.timer_text}")
-        painter.drawText(24, 120, f"Camera: {render_state.camera_status_text}")
-        painter.drawText(24, 148, f"Pose: {render_state.pose_status_text}")
-        painter.drawText(24, 176, f"Display: {render_state.display_status_text}")
-
-        painter.setPen(QColor("#ffd166"))
-        painter.drawText(24, 204, f"Calibration: {render_state.calibration_status_text}")
-        painter.setPen(QColor("white"))
+        self._draw_outlined_text(painter, 24, 36, f"Status: {render_state.status_text}")
+        self._draw_outlined_text(painter, 24, 64, f"Phase: {render_state.phase.name}")
+        self._draw_outlined_text(painter, 24, 92, f"Timer: {render_state.timer_text}")
+        self._draw_outlined_text(painter, 24, 120, f"Camera: {render_state.camera_status_text}")
+        self._draw_outlined_text(painter, 24, 148, f"Pose: {render_state.pose_status_text}")
+        self._draw_outlined_text(painter, 24, 176, f"Display: {render_state.display_status_text}")
+        self._draw_outlined_text(painter, 24, 204, f"Calibration: {render_state.calibration_status_text}", QColor("#ffd166"))
 
         for index, player in enumerate(render_state.players, start=1):
-            painter.drawText(24, height - 24 - (index - 1) * 20, f"{player.player_id}: {player.status_text}")
+            self._draw_outlined_text(
+                painter,
+                24,
+                height - 24 - (index - 1) * 20,
+                f"{player.player_id}: {player.status_text}",
+            )
+
+    def _draw_outlined_text(
+        self,
+        painter: QPainter,
+        x: int,
+        y: int,
+        text: str,
+        fill_color: QColor | None = None,
+    ) -> None:
+        fill = fill_color or QColor("white")
+        outline = QColor("black")
+        offsets = ((-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1))
+        painter.setPen(outline)
+        for offset_x, offset_y in offsets:
+            painter.drawText(x + offset_x, y + offset_y, text)
+        painter.setPen(fill)
+        painter.drawText(x, y, text)
 
     def _project_floor_cell(
         self,

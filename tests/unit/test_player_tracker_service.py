@@ -87,6 +87,14 @@ class PlayerTrackerServiceTests(unittest.TestCase):
         self.assertEqual(players["P1"].tracking_state, PlayerTrackingState.ACTIVE)
         self.assertEqual(players["P1"].standing_point, (1.5, 1.5))
 
+    def test_does_not_allocate_player_for_unmappable_detection(self) -> None:
+        players: dict[str, PlayerModel] = {}
+        detections = [MappedPlayerState(player_id="d1", standing_point=None, in_bounds=False)]
+
+        self.service.update_players(players, detections, timestamp=10.0, grace_period_seconds=0.35)
+
+        self.assertEqual(players, {})
+
 
 if __name__ == "__main__":
     unittest.main()

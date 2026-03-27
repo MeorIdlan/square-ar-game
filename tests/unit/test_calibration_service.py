@@ -43,6 +43,19 @@ class CalibrationServiceTests(unittest.TestCase):
         self.assertEqual(result.outer_bounds, ((0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)))
         self.assertEqual(result.playable_bounds, ((0.2, 0.2), (3.8, 0.2), (3.8, 3.8), (0.2, 3.8)))
 
+    def test_valid_marker_layout_computes_homography_when_ids_are_not_in_corner_order(self) -> None:
+        detected = {
+            0: np.array([[180.0, 180.0], [200.0, 180.0], [200.0, 200.0], [180.0, 200.0]], dtype=np.float32),
+            1: np.array([[0.0, 180.0], [20.0, 180.0], [20.0, 200.0], [0.0, 200.0]], dtype=np.float32),
+            2: np.array([[0.0, 0.0], [20.0, 0.0], [20.0, 20.0], [0.0, 20.0]], dtype=np.float32),
+            3: np.array([[180.0, 0.0], [200.0, 0.0], [200.0, 20.0], [180.0, 20.0]], dtype=np.float32),
+        }
+
+        result = self.service.calibrate_from_detected_markers(self.model, detected)
+
+        self.assertEqual(result.state, CalibrationState.VALID)
+        self.assertIsNotNone(result.homography)
+
     def test_calibration_rejects_fallback_frame_sources(self) -> None:
         frame = np.zeros((64, 64, 3), dtype=np.uint8)
 

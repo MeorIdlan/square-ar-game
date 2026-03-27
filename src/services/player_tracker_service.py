@@ -25,6 +25,8 @@ class PlayerTrackerService:
         }
 
         for detection in sorted(detections, key=self._sort_key):
+            if detection.standing_point is None:
+                continue
             matched_player_id = self._find_best_match(players, unmatched_player_ids, detection)
             if matched_player_id is None:
                 matched_player_id = self._allocate_player_id(players)
@@ -53,9 +55,6 @@ class PlayerTrackerService:
         candidate_ids: set[str],
         detection: MappedPlayerState,
     ) -> str | None:
-        if detection.standing_point is None:
-            return None
-
         best_player_id: str | None = None
         best_distance: float | None = None
 

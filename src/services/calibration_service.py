@@ -160,10 +160,11 @@ class CalibrationService:
                 validation_message="Configured playable rectangle is invalid.",
             )
 
-        image_points = np.array(
+        marker_centers = np.array(
             [self._marker_center(detected_markers[marker_id]) for marker_id in required_ids],
             dtype=np.float32,
         )
+        image_points = self._order_corners(marker_centers)
         world_points = np.array(outer, dtype=np.float32)
 
         if not self._is_quadrilateral_convex(image_points):
@@ -247,6 +248,19 @@ class CalibrationService:
             cross_z = edge_a[0] * edge_b[1] - edge_a[1] * edge_b[0]
             signs.append(float(cross_z))
         return all(value > 0 for value in signs) or all(value < 0 for value in signs)
+
+    @staticmethod
+    def _order_corners(points: np.ndarray) -> np.ndarray:
+        sorted_by_y = points[np.argsort(points[:, 1])]
+        top = sorted_by_y[:2]
+        bottom = sorted_by_y[2:]
+
+        top = top[np.argsort(top[:, 0])]
+        bottom = bottom[np.argsort(bottom[:, 0])]
+
+        top_left, top_right = top
+        bottom_left, bottom_right = bottom
+        return np.array([top_left, top_right, bottom_right, bottom_left], dtype=np.float32)
 
     @staticmethod
     def _mean_reprojection_error(homography: np.ndarray, image_points: np.ndarray, world_points: np.ndarray) -> float:
