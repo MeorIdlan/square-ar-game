@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from PyQt6.QtGui import QGuiApplication
+from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtGui import QCloseEvent, QGuiApplication
 from PyQt6.QtWidgets import (
     QComboBox,
     QDoubleSpinBox,
@@ -22,11 +23,14 @@ from src.utils.config import CameraProfile
 
 
 class MainWindow(QMainWindow):
+    close_requested = pyqtSignal()
+
     def __init__(self, viewmodel: MainViewModel) -> None:
         super().__init__()
         self._viewmodel = viewmodel
         self.setWindowTitle("Square AR Game Control")
         self.resize(720, 480)
+        self._suppress_close_request = False
 
         central_widget = QWidget(self)
         layout = QGridLayout(central_widget)
@@ -366,3 +370,11 @@ class MainWindow(QMainWindow):
         player_id = self._selected_player_id()
         if player_id is not None:
             self._viewmodel.remove_player(player_id)
+
+    def suppress_close_request(self, suppress: bool) -> None:
+        self._suppress_close_request = suppress
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        if not self._suppress_close_request:
+            self.close_requested.emit()
+        super().closeEvent(event)

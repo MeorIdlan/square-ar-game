@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from math import dist
 
 from PyQt6.QtCore import QObject, pyqtSignal
 
@@ -251,6 +252,10 @@ class MainViewModel(QObject):
         self.status_changed.emit(f"Saved settings to {self._config_store.config_path}")
         self._logger.info("Save settings requested")
 
+    def autosave_config(self) -> None:
+        self._config_store.save(self._config)
+        self._logger.info("Autosaved settings to %s", self._config_store.config_path)
+
     def handle_frame_packet(self, frame_packet: FramePacket) -> None:
         self._latest_frame_packet = frame_packet
         if frame_packet.is_live:
@@ -284,6 +289,8 @@ class MainViewModel(QObject):
                 )
             )
 
+        mapped_detections = self._deduplicate_mapped_detections(mapped_detections)
+
         self._player_tracker_service.update_players(
             self._session_model.players,
             mapped_detections,
@@ -305,6 +312,29 @@ class MainViewModel(QObject):
         self._session_model.status_message = f"Tracking {active_count} active player(s)"
 
         self._publish_session(self._session_model)
+
+    def _deduplicate_mapped_detections(self, detections: list[MappedPlayerState]) -> list[MappedPlayerState]:
+        unique: list[MappedPlayerState] = []
+        for detection in sorted(detections, key=lambda item: item.confidence, reverse=True):
+            if detection.standing_point is None:
+                unique.append(detection)
+                continue
+
+            duplicate_found = False
+            for existing in unique:
+                if existing.standing_point is None:
+                    continue
+                if detection.occupied_cell is not None and detection.occupied_cell == existing.occupied_cell:
+                    duplicate_found = True
+                    break
+                if dist(detection.standing_point, existing.standing_point) <= 0.35:
+                    duplicate_found = True
+                    break
+
+            if not duplicate_found:
+                unique.append(detection)
+
+        return unique
 
     def _on_calibration_updated(self, calibration_model: object) -> None:
         self._session_model.calibration = calibration_model

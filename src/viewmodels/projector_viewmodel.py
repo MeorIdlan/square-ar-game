@@ -10,6 +10,7 @@ from src.services.overlay_render_service import OverlayRenderService
 
 class ProjectorViewModel(QObject):
     image_updated = pyqtSignal(object)
+    render_requested = pyqtSignal(object, object, object)
 
     def __init__(self, render_service: OverlayRenderService) -> None:
         super().__init__()
@@ -21,5 +22,7 @@ class ProjectorViewModel(QObject):
         frame_packet: FramePacket | None = None,
         calibration: CalibrationModel | None = None,
     ) -> None:
-        image = self._render_service.render(1280, 720, render_state, frame_packet=frame_packet, calibration=calibration)
+        self.render_requested.emit(render_state, frame_packet, calibration)
+
+    def forward_rendered_image(self, image: object) -> None:
         self.image_updated.emit(image)
