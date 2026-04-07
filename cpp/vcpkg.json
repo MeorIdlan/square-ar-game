@@ -17,5 +17,5 @@
     "onnxruntime",
     "directxtk"
   ],
-  "builtin-baseline": "943c5ef1c8f6b5e6ced092b242c8299caae2ff01"
+  "builtin-baseline": "81e3c888ef717a026eb57bb2f3cb0dbd30246271"
 }
