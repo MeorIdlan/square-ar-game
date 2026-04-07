@@ -7,12 +7,13 @@ from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs, co
 
 
 project_root = Path(SPEC).resolve().parent
+repo_root = project_root.parent
 exe_name = "SquareARGame" if os.name == "nt" else "SquareARGame-bin"
 
 datas = []
 datas += collect_data_files("mediapipe")
-datas.append((str(project_root / "assets" / "models" / "pose_landmarker_lite.task"), "assets/models"))
-datas.append((str(project_root / "assets" / "models" / "pose_landmarker_full.task"), "assets/models"))
+datas.append((str(repo_root / "assets" / "models" / "pose_landmarker_lite.task"), "assets/models"))
+datas.append((str(repo_root / "assets" / "models" / "pose_landmarker_full.task"), "assets/models"))
 
 binaries = []
 binaries += collect_dynamic_libs("cv2")

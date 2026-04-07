@@ -10,8 +10,8 @@ from src.utils.app_paths import application_root, log_directory
 class TestApplicationRoot:
     def test_dev_mode_returns_project_root(self) -> None:
         root = application_root()
-        assert (root / "src").is_dir()
-        assert (root / "pyproject.toml").is_file()
+        assert (root / "assets").is_dir()
+        assert (root / "python" / "src").is_dir()
 
     def test_frozen_with_meipass(self, tmp_path: Path) -> None:
         fake_meipass = str(tmp_path / "bundle")

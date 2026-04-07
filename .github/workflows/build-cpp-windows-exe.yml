@@ -1,0 +1,94 @@
+name: Build C++ Windows EXE
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+    paths:
+      - 'cpp/**'
+      - 'assets/**'
+      - '.github/workflows/build-cpp-windows-exe.yml'
+  pull_request:
+    paths:
+      - 'cpp/**'
+      - 'assets/**'
+      - '.github/workflows/build-cpp-windows-exe.yml'
+
+permissions:
+  contents: write
+
+env:
+  BUILD_TYPE: Release
+
+jobs:
+  build-cpp-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: ${{ github.workspace }}/vcpkg
+          vcpkgGitCommitId: '2024.04.26'
+          vcpkgJsonGlob: 'cpp/vcpkg.json'
+
+      - name: Configure CMake
+        shell: pwsh
+        run: >
+          cmake -B cpp/build -S cpp
+          -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake"
+          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
+          -DVCPKG_TARGET_TRIPLET=x64-windows
+
+      - name: Build
+        shell: pwsh
+        run: cmake --build cpp/build --config ${{ env.BUILD_TYPE }} --parallel
+
+      - name: Run tests
+        shell: pwsh
+        run: ctest --test-dir cpp/build --output-on-failure -C ${{ env.BUILD_TYPE }}
+
+      - name: Prepare release directory
+        shell: pwsh
+        run: |
+          $releaseDir = "cpp/build/${{ env.BUILD_TYPE }}"
+          $distDir = "cpp/dist/SquareARGame"
+          New-Item -ItemType Directory -Force -Path $distDir
+
+          # Copy main executable
+          Copy-Item "$releaseDir/square_ar_game.exe" -Destination $distDir
+
+          # Copy runtime DLLs from the build output
+          Get-ChildItem "$releaseDir" -Filter "*.dll" | Copy-Item -Destination $distDir
+
+          # Copy shared assets
+          Copy-Item -Recurse "assets" -Destination "$distDir/assets"
+
+      - name: Create release archive
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $archiveName = if ($tag) { "square-ar-game-cpp-$tag-windows.zip" } else { "square-ar-game-cpp-windows.zip" }
+          Compress-Archive -Path cpp/dist/SquareARGame/* -DestinationPath "cpp/dist/$archiveName" -Force
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: square-ar-game-cpp-windows
+          path: |
+            cpp/dist/SquareARGame/**
+            cpp/dist/*.zip
+          if-no-files-found: error
+
+      - name: Publish GitHub release asset
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: cpp/dist/*.zip

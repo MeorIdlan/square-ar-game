@@ -1,0 +1,21 @@
+{
+  "name": "square-ar-game",
+  "version-string": "1.0.0",
+  "description": "Physical AR floor elimination game",
+  "dependencies": [
+    {
+      "name": "opencv4",
+      "features": ["contrib"],
+      "version>=": "4.8.0"
+    },
+    "nlohmann-json",
+    {
+      "name": "imgui",
+      "features": ["dx11-binding", "win32-binding"]
+    },
+    "gtest",
+    "onnxruntime",
+    "directxtk"
+  ],
+  "builtin-baseline": "2024.04.26"
+}

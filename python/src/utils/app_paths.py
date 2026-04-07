@@ -10,7 +10,7 @@ def application_root() -> Path:
         if meipass:
             return Path(meipass).resolve()
         return Path(sys.executable).resolve().parent
-    return Path(__file__).resolve().parents[2]
+    return Path(__file__).resolve().parents[3]
 
 
 def internal_runtime_root() -> Path:
