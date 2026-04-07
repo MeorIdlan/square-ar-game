@@ -6,14 +6,14 @@ from PyQt6.QtGui import QImage
 from src.models.calibration_model import CalibrationModel
 from src.models.contracts import FramePacket
 from src.models.contracts import RenderState
-from src.services.overlay_render_service import OverlayRenderService
+from src.services.protocols import OverlayRenderServiceProtocol
 
 
 class ProjectorViewModel(QObject):
     image_updated = pyqtSignal(QImage)
     render_requested = pyqtSignal(object, object, object)
 
-    def __init__(self, render_service: OverlayRenderService) -> None:
+    def __init__(self, render_service: OverlayRenderServiceProtocol) -> None:
         super().__init__()
         self._render_service = render_service
 

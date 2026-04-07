@@ -9,6 +9,7 @@ from src.models.calibration_model import CalibrationModel
 from src.models.contracts import FramePacket, RenderState
 from src.services.debug_render_service import DebugRenderService
 from src.services.overlay_render_service import OverlayRenderService
+from src.utils.constants import DEBUG_CANVAS_SIZE, PROJECTOR_CANVAS_SIZE
 
 
 class ProjectorRenderWorker(QObject):
@@ -18,7 +19,9 @@ class ProjectorRenderWorker(QObject):
         super().__init__()
         self._logger = logging.getLogger(__name__)
         self._render_service = render_service
-        self._latest_request: tuple[RenderState, FramePacket | None, CalibrationModel | None] | None = None
+        self._latest_request: (
+            tuple[RenderState, FramePacket | None, CalibrationModel | None] | None
+        ) = None
         self._processing = False
 
     @pyqtSlot(object, object, object)
@@ -45,8 +48,8 @@ class ProjectorRenderWorker(QObject):
 
                 render_state, frame_packet, calibration = request
                 image = self._render_service.render(
-                    1280,
-                    720,
+                    PROJECTOR_CANVAS_SIZE[0],
+                    PROJECTOR_CANVAS_SIZE[1],
                     render_state,
                     frame_packet=frame_packet,
                     calibration=calibration,
@@ -85,7 +88,9 @@ class DebugRenderWorker(QObject):
                 if render_state is None:
                     return
 
-                image = self._render_service.render(640, 640, render_state)
+                image = self._render_service.render(
+                    DEBUG_CANVAS_SIZE[0], DEBUG_CANVAS_SIZE[1], render_state
+                )
                 self.image_ready.emit(image)
         except Exception:
             self._logger.exception("Debug render worker failed")

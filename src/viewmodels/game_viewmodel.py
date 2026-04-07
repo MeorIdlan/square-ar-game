@@ -6,13 +6,18 @@ from PyQt6.QtCore import QObject, QTimer, pyqtSignal
 
 from src.models.enums import RoundPhase
 from src.models.game_session_model import GameSessionModel
-from src.services.game_engine_service import GameEngineService
+from src.services.protocols import GameEngineServiceProtocol
+from src.utils.constants import GAME_TICK_INTERVAL_MS
 
 
 class GameViewModel(QObject):
     session_updated = pyqtSignal(object)
 
-    def __init__(self, session_model: GameSessionModel, game_engine_service: GameEngineService) -> None:
+    def __init__(
+        self,
+        session_model: GameSessionModel,
+        game_engine_service: GameEngineServiceProtocol,
+    ) -> None:
         super().__init__()
         self._session_model = session_model
         self._game_engine_service = game_engine_service
@@ -57,17 +62,23 @@ class GameViewModel(QObject):
         self.session_updated.emit(self._session_model)
 
     def _ensure_timer_running(self) -> None:
-        if self._session_model.round_state.phase in (RoundPhase.IDLE, RoundPhase.FINISHED):
+        if self._session_model.round_state.phase in (
+            RoundPhase.IDLE,
+            RoundPhase.FINISHED,
+        ):
             return
         self._last_tick_at = monotonic()
         if not self._timer.isActive():
-            self._timer.start(100)
+            self._timer.start(GAME_TICK_INTERVAL_MS)
 
     def _on_timer_tick(self) -> None:
         now = monotonic()
         delta_seconds = max(0.0, now - self._last_tick_at)
         self._last_tick_at = now
         self._game_engine_service.tick(self._session_model, delta_seconds)
-        if self._session_model.round_state.phase in (RoundPhase.IDLE, RoundPhase.FINISHED):
+        if self._session_model.round_state.phase in (
+            RoundPhase.IDLE,
+            RoundPhase.FINISHED,
+        ):
             self._timer.stop()
         self.session_updated.emit(self._session_model)

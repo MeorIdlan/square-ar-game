@@ -10,6 +10,7 @@ import mediapipe as mp
 from src.models.contracts import FramePacket, PoseResult
 from src.models.contracts import Point, PoseFootState
 from src.utils.config import PoseSettings
+from src.utils.constants import FOOT_LANDMARK_LEFT, FOOT_LANDMARK_RIGHT
 
 
 class PoseTrackingService:
@@ -55,11 +56,17 @@ class PoseTrackingService:
     def process_frame(self, frame_packet: FramePacket) -> PoseResult:
         frame = frame_packet.frame
         if frame is None:
-            return PoseResult(frame_id=frame_packet.frame_id, status_text="No frame available for pose tracking")
+            return PoseResult(
+                frame_id=frame_packet.frame_id,
+                status_text="No frame available for pose tracking",
+            )
 
         landmarker = self._ensure_landmarker()
         if landmarker is None:
-            return PoseResult(frame_id=frame_packet.frame_id, status_text="Pose landmarker unavailable")
+            return PoseResult(
+                frame_id=frame_packet.frame_id,
+                status_text="Pose landmarker unavailable",
+            )
 
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
@@ -69,7 +76,9 @@ class PoseTrackingService:
         detections: list[PoseFootState] = []
         pose_landmarks = getattr(result, "pose_landmarks", [])
         for landmarks in pose_landmarks:
-            foot_state = self._extract_pose_foot_state(landmarks, frame.shape[1], frame.shape[0])
+            foot_state = self._extract_pose_foot_state(
+                landmarks, frame.shape[1], frame.shape[0]
+            )
             if foot_state is not None:
                 detections.append(foot_state)
 
@@ -107,13 +116,17 @@ class PoseTrackingService:
 
         if not self._model_asset_path.exists():
             if not self._missing_model_logged:
-                self._logger.warning("Pose model asset not found at %s", self._model_asset_path)
+                self._logger.warning(
+                    "Pose model asset not found at %s", self._model_asset_path
+                )
                 self._missing_model_logged = True
             self._initialization_failed = True
             return None
 
         delegates: list[tuple[str, Any | None]] = [("CPU", None)]
-        if self._settings.use_gpu_if_available and hasattr(mp.tasks.BaseOptions, "Delegate"):
+        if self._settings.use_gpu_if_available and hasattr(
+            mp.tasks.BaseOptions, "Delegate"
+        ):
             delegates.insert(0, ("GPU", mp.tasks.BaseOptions.Delegate.GPU))
 
         last_error: Exception | None = None
@@ -128,17 +141,29 @@ class PoseTrackingService:
                 output_segmentation_masks=False,
             )
             try:
-                self._landmarker = mp.tasks.vision.PoseLandmarker.create_from_options(options)
+                self._landmarker = mp.tasks.vision.PoseLandmarker.create_from_options(
+                    options
+                )
                 self._active_delegate_name = delegate_name
-                self._logger.info("MediaPipe pose landmarker initialized successfully using %s delegate", delegate_name)
+                self._logger.info(
+                    "MediaPipe pose landmarker initialized successfully using %s delegate",
+                    delegate_name,
+                )
                 return self._landmarker
             except (OSError, RuntimeError, ValueError) as error:
                 last_error = error
-                self._logger.warning("Unable to initialize MediaPipe pose landmarker with %s delegate: %s", delegate_name, error)
+                self._logger.warning(
+                    "Unable to initialize MediaPipe pose landmarker with %s delegate: %s",
+                    delegate_name,
+                    error,
+                )
 
         self._initialization_failed = True
         if last_error is not None:
-            self._logger.warning("Pose landmarker initialization failed after all delegate attempts: %s", last_error)
+            self._logger.warning(
+                "Pose landmarker initialization failed after all delegate attempts: %s",
+                last_error,
+            )
         return None
 
     def _base_options(self, delegate: Any | None):
@@ -147,18 +172,29 @@ class PoseTrackingService:
             kwargs["delegate"] = delegate
         return mp.tasks.BaseOptions(**kwargs)
 
-    def _extract_pose_foot_state(self, landmarks: list[object], width: int, height: int) -> PoseFootState | None:
-        left_foot, left_score = self._extract_weighted_foot_point(landmarks, (27, 29, 31), width, height)
-        right_foot, right_score = self._extract_weighted_foot_point(landmarks, (28, 30, 32), width, height)
+    def _extract_pose_foot_state(
+        self, landmarks: list[object], width: int, height: int
+    ) -> PoseFootState | None:
+        left_foot, left_score = self._extract_weighted_foot_point(
+            landmarks, FOOT_LANDMARK_LEFT, width, height
+        )
+        right_foot, right_score = self._extract_weighted_foot_point(
+            landmarks, FOOT_LANDMARK_RIGHT, width, height
+        )
 
         if left_foot is None and right_foot is None:
             return None
 
         visible_scores = [score for score in (left_score, right_score) if score > 0.0]
-        confidence = sum(visible_scores) / len(visible_scores) if visible_scores else 0.0
+        confidence = (
+            sum(visible_scores) / len(visible_scores) if visible_scores else 0.0
+        )
         resolved_point = None
         if left_foot and right_foot:
-            resolved_point = ((left_foot[0] + right_foot[0]) / 2.0, (left_foot[1] + right_foot[1]) / 2.0)
+            resolved_point = (
+                (left_foot[0] + right_foot[0]) / 2.0,
+                (left_foot[1] + right_foot[1]) / 2.0,
+            )
         else:
             resolved_point = left_foot or right_foot
 

@@ -5,10 +5,11 @@ from math import dist
 from src.models.contracts import MappedPlayerState
 from src.models.enums import PlayerTrackingState
 from src.models.player_model import PlayerModel
+from src.utils.constants import PLAYER_MATCH_MAX_DISTANCE
 
 
 class PlayerTrackerService:
-    def __init__(self, max_match_distance: float = 1.25) -> None:
+    def __init__(self, max_match_distance: float = PLAYER_MATCH_MAX_DISTANCE) -> None:
         self._max_match_distance = max_match_distance
 
     def update_players(
@@ -27,7 +28,9 @@ class PlayerTrackerService:
         for detection in sorted(detections, key=self._sort_key):
             if detection.standing_point is None:
                 continue
-            matched_player_id = self._find_best_match(players, unmatched_player_ids, detection)
+            matched_player_id = self._find_best_match(
+                players, unmatched_player_ids, detection
+            )
             if matched_player_id is None:
                 matched_player_id = self._allocate_player_id(players)
                 players[matched_player_id] = PlayerModel(player_id=matched_player_id)
@@ -61,7 +64,10 @@ class PlayerTrackerService:
         for player_id in candidate_ids:
             player = players[player_id]
             if player.standing_point is None:
-                if player.tracking_state in (PlayerTrackingState.UNKNOWN, PlayerTrackingState.MISSING):
+                if player.tracking_state in (
+                    PlayerTrackingState.UNKNOWN,
+                    PlayerTrackingState.MISSING,
+                ):
                     return player_id
                 continue
 
@@ -74,7 +80,9 @@ class PlayerTrackerService:
 
         return best_player_id
 
-    def _apply_detection(self, player: PlayerModel, detection: MappedPlayerState, timestamp: float) -> None:
+    def _apply_detection(
+        self, player: PlayerModel, detection: MappedPlayerState, timestamp: float
+    ) -> None:
         player.standing_point = detection.standing_point
         player.left_foot = detection.left_foot
         player.right_foot = detection.right_foot

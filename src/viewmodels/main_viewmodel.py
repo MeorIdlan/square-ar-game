@@ -2,24 +2,29 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from math import dist
 
 from PyQt6.QtCore import QObject, pyqtSignal
 
 from src.models.contracts import FramePacket, MappedPlayerState, PoseResult
 from src.models.enums import AppState, PlayerTrackingState
 from src.models.game_session_model import GameSessionModel
-from src.services.camera_service import CameraService
-from src.services.floor_mapping_service import FloorMappingService
-from src.services.game_engine_service import GameEngineService
-from src.services.player_tracker_service import PlayerTrackerService
 from src.services.calibration_service import CalibrationService
-from src.services.pose_tracking_service import PoseTrackingService
+from src.services.detection_deduplicator import deduplicate_detections
+from src.services.protocols import (
+    CameraServiceProtocol,
+    FloorMappingServiceProtocol,
+    GameEngineServiceProtocol,
+    PlayerTrackerServiceProtocol,
+    PoseTrackingServiceProtocol,
+)
 from src.utils.app_paths import application_root
 from src.utils.config import AppConfig, CameraProfile, ConfigStore, POSE_MODEL_OPTIONS
 from src.viewmodels.calibration_viewmodel import CalibrationViewModel
+from src.viewmodels.camera_coordinator import CameraCoordinator
+from src.viewmodels.config_coordinator import ConfigCoordinator
 from src.viewmodels.debug_viewmodel import DebugViewModel
 from src.viewmodels.game_viewmodel import GameViewModel
+from src.utils.constants import DETECTION_DEDUP_DISTANCE
 from src.viewmodels.projector_viewmodel import ProjectorViewModel
 
 
@@ -38,30 +43,41 @@ class MainViewModel(QObject):
         game_viewmodel: GameViewModel,
         projector_viewmodel: ProjectorViewModel,
         debug_viewmodel: DebugViewModel,
-        camera_service: CameraService,
-        pose_tracking_service: PoseTrackingService,
-        floor_mapping_service: FloorMappingService,
-        game_engine_service: GameEngineService,
-        player_tracker_service: PlayerTrackerService,
+        camera_service: CameraServiceProtocol,
+        pose_tracking_service: PoseTrackingServiceProtocol,
+        floor_mapping_service: FloorMappingServiceProtocol,
+        game_engine_service: GameEngineServiceProtocol,
+        player_tracker_service: PlayerTrackerServiceProtocol,
     ) -> None:
         super().__init__()
         self._logger = logging.getLogger(__name__)
         self._config = config
-        self._config_store = config_store
         self._session_model = session_model
         self.calibration_viewmodel = calibration_viewmodel
         self.game_viewmodel = game_viewmodel
         self.projector_viewmodel = projector_viewmodel
         self.debug_viewmodel = debug_viewmodel
-        self._camera_service = camera_service
+        self._camera_coordinator = CameraCoordinator(config, camera_service)
+        self._config_coordinator = ConfigCoordinator(
+            config, config_store, session_model
+        )
         self._pose_tracking_service = pose_tracking_service
         self._floor_mapping_service = floor_mapping_service
         self._game_engine_service = game_engine_service
         self._player_tracker_service = player_tracker_service
         self._latest_frame_packet: FramePacket | None = None
 
-        self.calibration_viewmodel.calibration_updated.connect(self._on_calibration_updated)
+        self.calibration_viewmodel.calibration_updated.connect(
+            self._on_calibration_updated
+        )
         self.game_viewmodel.session_updated.connect(self._publish_session)
+        self._camera_coordinator.camera_status_changed.connect(
+            self._on_camera_status_changed
+        )
+        self._camera_coordinator.capture_interval_changed.connect(
+            self.camera_capture_interval_changed
+        )
+        self._config_coordinator.config_changed.connect(self._on_config_changed)
         self._logger.info("Main viewmodel initialized")
 
     @property
@@ -77,17 +93,19 @@ class MainViewModel(QObject):
         self._session_model.status_message = "Ready to calibrate"
         self._session_model.camera_status_message = "Waiting for camera frames"
         self._session_model.pose_status_message = "Pose tracking idle"
-        self._session_model.display_status_message = (
-            f"Projector assigned to display {self._config.display.projector_screen_index}"
-        )
+        self._session_model.display_status_message = f"Projector assigned to display {self._config.display.projector_screen_index}"
         self.projector_screen_changed.emit(self._config.display.projector_screen_index)
-        self.camera_capture_interval_changed.emit(self._target_interval_ms())
+        self.camera_capture_interval_changed.emit(
+            self._camera_coordinator.target_interval_ms()
+        )
         self._logger.info("Main viewmodel initialization complete")
         self._publish_session(self._session_model)
 
     def calibrate(self) -> None:
         self._session_model.app_state = AppState.CALIBRATING
-        self._session_model.status_message = "Attempting ArUco calibration from latest camera frame"
+        self._session_model.status_message = (
+            "Attempting ArUco calibration from latest camera frame"
+        )
         self.status_changed.emit(self._session_model.status_message)
         self.calibration_viewmodel.calibrate(self._latest_frame_packet)
 
@@ -104,7 +122,10 @@ class MainViewModel(QObject):
             candidate = Path(relative_path)
             if not candidate.is_absolute():
                 candidate = root / candidate
-            if candidate.exists() or self._config.pose.model_asset_path == relative_path:
+            if (
+                candidate.exists()
+                or self._config.pose.model_asset_path == relative_path
+            ):
                 supported.append((label, relative_path))
         return supported
 
@@ -121,76 +142,33 @@ class MainViewModel(QObject):
 
         self._config.pose.model_asset_path = model_asset_path
         self._pose_tracking_service.set_model_asset_path(resolved_path)
-        self._session_model.pose_status_message = f"Pose model switched to {resolved_path.name}"
+        self._session_model.pose_status_message = (
+            f"Pose model switched to {resolved_path.name}"
+        )
         self._session_model.status_message = f"Pose model set to {resolved_path.name}"
         self._logger.info("Pose model updated to %s", model_asset_path)
         self._publish_session(self._session_model)
 
     def update_aruco_dictionary(self, dictionary_name: str) -> None:
-        if dictionary_name not in CalibrationService.supported_dictionary_names():
-            return
-        self._config.aruco_dictionary = dictionary_name
-        self._session_model.status_message = f"ArUco dictionary set to {dictionary_name}"
-        self._logger.info("ArUco dictionary updated to %s", dictionary_name)
-        self._publish_session(self._session_model)
+        self._config_coordinator.update_aruco_dictionary(dictionary_name)
 
     def available_camera_indices(self) -> list[int]:
-        return self._camera_service.available_camera_indices()
+        return self._camera_coordinator.available_camera_indices()
 
     def available_camera_profiles(self, probe: bool = False) -> list[CameraProfile]:
-        return self._camera_service.available_camera_profiles(self._config.camera.camera_index, probe=probe)
+        return self._camera_coordinator.available_camera_profiles(probe=probe)
 
     def update_camera_index(self, camera_index: int) -> None:
-        self._config.camera.camera_index = camera_index
-        self._camera_service.set_camera_index(camera_index)
-        self._session_model.status_message = f"Switched to camera index {camera_index}"
-        self._session_model.camera_status_message = (
-            f"Camera {camera_index} selected at {self._config.camera.profile.label}. Waiting for live frames"
-        )
-        self._logger.info("Camera index updated to %s", camera_index)
-        self._publish_session(self._session_model)
+        self._camera_coordinator.update_camera_index(camera_index)
 
     def update_camera_profile(self, profile: CameraProfile) -> None:
-        self._config.camera.apply_profile(profile)
-        self._camera_service.set_camera_profile(profile)
-        self.camera_capture_interval_changed.emit(self._target_interval_ms())
-        self._session_model.status_message = f"Camera profile set to {profile.label}"
-        self._session_model.camera_status_message = (
-            f"Camera {self._config.camera.camera_index} selected at {profile.label}. Reconnect in progress"
-        )
-        if self._camera_service.reconnect():
-            self._session_model.status_message = f"Camera profile applied: {profile.label}"
-        else:
-            detail = self._camera_service.last_error_message or "Live camera feed unavailable."
-            self._session_model.camera_status_message = f"Fallback frame in use. {detail}"
-            self._session_model.status_message = f"Camera profile failed: {profile.label}"
-            self._logger.warning("Camera profile apply failed for %s: %s", profile.label, detail)
-        self._publish_session(self._session_model)
-
-    def _target_interval_ms(self) -> int:
-        return max(1, int(round(1000 / max(self._config.camera.target_fps, 1))))
+        self._camera_coordinator.update_camera_profile(profile)
 
     def refresh_camera_sources(self) -> list[int]:
-        indices = self._camera_service.available_camera_indices()
-        if indices:
-            self._session_model.status_message = f"Detected camera indices: {', '.join(str(index) for index in indices)}"
-        else:
-            self._session_model.status_message = "No camera indices detected"
-        self._publish_session(self._session_model)
-        return indices
+        return self._camera_coordinator.refresh_sources()
 
     def reconnect_camera(self) -> None:
-        if self._camera_service.reconnect():
-            self._session_model.camera_status_message = (
-                f"Camera {self._config.camera.camera_index} reconnected. Waiting for live frame confirmation"
-            )
-            self._session_model.status_message = f"Reconnect requested for camera {self._config.camera.camera_index}"
-        else:
-            detail = self._camera_service.last_error_message or "Live camera feed unavailable."
-            self._session_model.camera_status_message = f"Fallback frame in use. {detail}"
-            self._session_model.status_message = f"Reconnect failed for camera {self._config.camera.camera_index}"
-            self._logger.warning("Camera reconnect failed: %s", detail)
-        self._publish_session(self._session_model)
+        self._camera_coordinator.reconnect()
 
     def update_display_probe(self, screen_count: int) -> None:
         self._session_model.display_status_message = (
@@ -202,8 +180,12 @@ class MainViewModel(QObject):
     def update_projector_screen_index(self, screen_index: int) -> None:
         self._config.display.projector_screen_index = screen_index
         self.projector_screen_changed.emit(screen_index)
-        self._session_model.status_message = f"Projector assigned to display {screen_index}"
-        self._session_model.display_status_message = f"Projector assigned to display {screen_index}"
+        self._session_model.status_message = (
+            f"Projector assigned to display {screen_index}"
+        )
+        self._session_model.display_status_message = (
+            f"Projector assigned to display {screen_index}"
+        )
         self._logger.info("Projector screen updated to %s", screen_index)
         self._publish_session(self._session_model)
 
@@ -229,32 +211,22 @@ class MainViewModel(QObject):
         self.game_viewmodel.remove_player(player_id)
 
     def update_grid_rows(self, value: int) -> None:
-        self._config.grid.rows = value
-        self._session_model.grid.rows = value
-        self._session_model.grid.reset_states()
-        self._publish_session(self._session_model)
+        self._config_coordinator.update_grid_rows(value)
 
     def update_grid_columns(self, value: int) -> None:
-        self._config.grid.columns = value
-        self._session_model.grid.columns = value
-        self._session_model.grid.reset_states()
-        self._publish_session(self._session_model)
+        self._config_coordinator.update_grid_columns(value)
 
     def update_timing_setting(self, field_name: str, value: float) -> None:
-        if not hasattr(self._config.timings, field_name):
-            return
-        setattr(self._config.timings, field_name, value)
-        setattr(self._session_model.round_state.timings, field_name, value)
-        self._publish_session(self._session_model)
+        self._config_coordinator.update_timing_setting(field_name, value)
 
     def save_config(self) -> None:
-        self._config_store.save(self._config)
-        self.status_changed.emit(f"Saved settings to {self._config_store.config_path}")
-        self._logger.info("Save settings requested")
+        self._config_coordinator.save_config()
+        self.status_changed.emit(
+            f"Saved settings to {self._config_coordinator.config_path}"
+        )
 
     def autosave_config(self) -> None:
-        self._config_store.save(self._config)
-        self._logger.info("Autosaved settings to %s", self._config_store.config_path)
+        self._config_coordinator.autosave_config()
 
     def handle_frame_packet(self, frame_packet: FramePacket) -> None:
         self._latest_frame_packet = frame_packet
@@ -264,10 +236,14 @@ class MainViewModel(QObject):
             fps_text = ""
             if frame_packet.actual_fps is not None and frame_packet.actual_fps > 0:
                 fps_text = f" @ {frame_packet.actual_fps:.1f} FPS"
-            self._session_model.camera_status_message = f"Camera {frame_packet.camera_index} live at {width}x{height}{fps_text}"
+            self._session_model.camera_status_message = (
+                f"Camera {frame_packet.camera_index} live at {width}x{height}{fps_text}"
+            )
         else:
             detail = frame_packet.error_message or "Live camera feed unavailable."
-            self._session_model.camera_status_message = f"Fallback frame in use. {detail}"
+            self._session_model.camera_status_message = (
+                f"Fallback frame in use. {detail}"
+            )
         render_state = self._game_engine_service.build_render_state(self._session_model)
         self.projector_viewmodel.update_render_state(
             render_state,
@@ -289,7 +265,9 @@ class MainViewModel(QObject):
                 )
             )
 
-        mapped_detections = self._deduplicate_mapped_detections(mapped_detections)
+        mapped_detections = deduplicate_detections(
+            mapped_detections, DETECTION_DEDUP_DISTANCE
+        )
 
         self._player_tracker_service.update_players(
             self._session_model.players,
@@ -298,49 +276,39 @@ class MainViewModel(QObject):
             self._session_model.round_state.timings.missed_detection_grace_seconds,
         )
 
-        mapped_count = sum(1 for detection in mapped_detections if detection.standing_point is not None)
-        in_bounds_count = sum(1 for detection in mapped_detections if detection.in_bounds)
+        mapped_count = sum(
+            1 for detection in mapped_detections if detection.standing_point is not None
+        )
+        in_bounds_count = sum(
+            1 for detection in mapped_detections if detection.in_bounds
+        )
 
         active_count = sum(
             1
             for player in self._session_model.players.values()
             if player.tracking_state is PlayerTrackingState.ACTIVE
         )
-        self._session_model.pose_status_message = (
-            f"{pose_result.status_text} | mapped {mapped_count} | in bounds {in_bounds_count} | delegate {self._pose_tracking_service.active_delegate_name}"
-        )
+        self._session_model.pose_status_message = f"{pose_result.status_text} | mapped {mapped_count} | in bounds {in_bounds_count} | delegate {self._pose_tracking_service.active_delegate_name}"
         self._session_model.status_message = f"Tracking {active_count} active player(s)"
 
         self._publish_session(self._session_model)
 
-    def _deduplicate_mapped_detections(self, detections: list[MappedPlayerState]) -> list[MappedPlayerState]:
-        unique: list[MappedPlayerState] = []
-        for detection in sorted(detections, key=lambda item: item.confidence, reverse=True):
-            if detection.standing_point is None:
-                unique.append(detection)
-                continue
-
-            duplicate_found = False
-            for existing in unique:
-                if existing.standing_point is None:
-                    continue
-                if detection.occupied_cell is not None and detection.occupied_cell == existing.occupied_cell:
-                    duplicate_found = True
-                    break
-                if dist(detection.standing_point, existing.standing_point) <= 0.35:
-                    duplicate_found = True
-                    break
-
-            if not duplicate_found:
-                unique.append(detection)
-
-        return unique
-
     def _on_calibration_updated(self, calibration_model: object) -> None:
         self._session_model.calibration = calibration_model
-        self._session_model.app_state = AppState.CALIBRATED if calibration_model.is_valid else AppState.CAMERA_READY
+        self._session_model.app_state = (
+            AppState.CALIBRATED if calibration_model.is_valid else AppState.CAMERA_READY
+        )
         self._session_model.status_message = calibration_model.validation_message
-        self._logger.info("Calibration update applied valid=%s", calibration_model.is_valid)
+        self._logger.info(
+            "Calibration update applied valid=%s", calibration_model.is_valid
+        )
+        self._publish_session(self._session_model)
+
+    def _on_camera_status_changed(self, status: str) -> None:
+        self._session_model.camera_status_message = status
+        self._publish_session(self._session_model)
+
+    def _on_config_changed(self) -> None:
         self._publish_session(self._session_model)
 
     def _publish_session(self, session_model: GameSessionModel) -> None:

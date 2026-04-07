@@ -39,7 +39,9 @@ class CameraSettings:
 
     @property
     def profile(self) -> CameraProfile:
-        return CameraProfile(width=self.frame_width, height=self.frame_height, fps=self.target_fps)
+        return CameraProfile(
+            width=self.frame_width, height=self.frame_height, fps=self.target_fps
+        )
 
     def apply_profile(self, profile: CameraProfile) -> None:
         self.frame_width = profile.width
@@ -85,7 +87,9 @@ class AppConfig:
 
 class ConfigStore:
     def __init__(self, config_path: Path | None = None) -> None:
-        self._config_path = config_path or Path.home() / ".square-ar-game" / "settings.json"
+        self._config_path = (
+            config_path or Path.home() / ".square-ar-game" / "settings.json"
+        )
         self._config_path.parent.mkdir(parents=True, exist_ok=True)
         self._logger = logging.getLogger(__name__)
 
@@ -95,24 +99,18 @@ class ConfigStore:
 
     def load(self) -> AppConfig:
         if not self._config_path.exists():
-            self._logger.info("Config file not found at %s; using defaults", self._config_path)
+            self._logger.info(
+                "Config file not found at %s; using defaults", self._config_path
+            )
             return AppConfig()
 
         raw_data = json.loads(self._config_path.read_text(encoding="utf-8"))
-        pose_settings = PoseSettings(**raw_data.get("pose", {}))
-        if pose_settings.min_pose_detection_confidence == 0.5:
-            pose_settings.min_pose_detection_confidence = 0.35
-        if pose_settings.min_pose_presence_confidence == 0.5:
-            pose_settings.min_pose_presence_confidence = 0.35
-        if pose_settings.min_tracking_confidence == 0.5:
-            pose_settings.min_tracking_confidence = 0.35
-        if pose_settings.min_landmark_visibility == 0.4:
-            pose_settings.min_landmark_visibility = 0.2
+        raw_data = self._migrate(raw_data)
 
         config = AppConfig(
             camera=CameraSettings(**raw_data.get("camera", {})),
             display=DisplaySettings(**raw_data.get("display", {})),
-            pose=pose_settings,
+            pose=PoseSettings(**raw_data.get("pose", {})),
             grid=GridSettings(**raw_data.get("grid", {})),
             timings=RoundTimingSettings(**raw_data.get("timings", {})),
             aruco_dictionary=raw_data.get("aruco_dictionary", "DICT_6X6_1000"),
@@ -120,6 +118,21 @@ class ConfigStore:
         )
         self._logger.info("Loaded config from %s", self._config_path)
         return config
+
+    @staticmethod
+    def _migrate(raw_data: dict) -> dict:
+        pose = raw_data.get("pose", {})
+        if pose.get("min_pose_detection_confidence") == 0.5:
+            pose["min_pose_detection_confidence"] = 0.35
+        if pose.get("min_pose_presence_confidence") == 0.5:
+            pose["min_pose_presence_confidence"] = 0.35
+        if pose.get("min_tracking_confidence") == 0.5:
+            pose["min_tracking_confidence"] = 0.35
+        if pose.get("min_landmark_visibility") == 0.4:
+            pose["min_landmark_visibility"] = 0.2
+        if pose:
+            raw_data["pose"] = pose
+        return raw_data
 
     def save(self, config: AppConfig) -> None:
         payload = asdict(config)

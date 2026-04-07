@@ -18,9 +18,12 @@ class CalibrationMarkerLayout:
 @dataclass(slots=True)
 class CalibrationModel:
     state: CalibrationState = CalibrationState.NOT_CALIBRATED
-    marker_layout: CalibrationMarkerLayout = field(default_factory=CalibrationMarkerLayout)
+    marker_layout: CalibrationMarkerLayout = field(
+        default_factory=CalibrationMarkerLayout
+    )
     detected_marker_corners: dict[int, np.ndarray] = field(default_factory=dict)
     homography: np.ndarray | None = None
+    inverse_homography: np.ndarray | None = None
     outer_bounds: tuple[Point, Point, Point, Point] | None = None
     playable_bounds: tuple[Point, Point, Point, Point] | None = None
     validation_message: str = "Not calibrated"
@@ -39,4 +42,8 @@ class CalibrationModel:
 
     @property
     def missing_marker_ids(self) -> list[int]:
-        return [marker_id for marker_id in self.marker_layout.marker_ids if marker_id not in self.detected_marker_corners]
+        return [
+            marker_id
+            for marker_id in self.marker_layout.marker_ids
+            if marker_id not in self.detected_marker_corners
+        ]

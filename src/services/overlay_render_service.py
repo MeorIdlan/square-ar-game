@@ -9,6 +9,7 @@ from src.models.calibration_model import CalibrationModel
 from src.models.contracts import FramePacket
 from src.models.contracts import RenderState
 from src.models.enums import CellState
+from src.utils.constants import FLASHING_CELL_ALPHA, FLASHING_CELL_COLOR
 from src.utils.image_conversion import numpy_to_qimage
 
 
@@ -32,7 +33,9 @@ class OverlayRenderService:
         painter.end()
         return image
 
-    def _prepare_base_image(self, width: int, height: int, frame_packet: FramePacket | None) -> QImage:
+    def _prepare_base_image(
+        self, width: int, height: int, frame_packet: FramePacket | None
+    ) -> QImage:
         if frame_packet is None or frame_packet.frame is None:
             image = QImage(width, height, QImage.Format.Format_RGB32)
             image.fill(QColor("black"))
@@ -48,10 +51,16 @@ class OverlayRenderService:
         render_state: RenderState,
         calibration: CalibrationModel | None,
     ) -> None:
-        if calibration is None or calibration.homography is None or calibration.playable_bounds is None:
+        if (
+            calibration is None
+            or calibration.homography is None
+            or calibration.playable_bounds is None
+        ):
             return
 
-        inverse_homography = np.linalg.inv(calibration.homography)
+        inverse_homography = calibration.inverse_homography
+        if inverse_homography is None:
+            return
         rows = max((cell[0] for cell in render_state.grid_cells), default=-1) + 1
         columns = max((cell[1] for cell in render_state.grid_cells), default=-1) + 1
         if rows <= 0 or columns <= 0:
@@ -86,11 +95,23 @@ class OverlayRenderService:
         if calibration is None or calibration.homography is None:
             return
 
-        inverse_homography = np.linalg.inv(calibration.homography)
+        inverse_homography = calibration.inverse_homography
+        if inverse_homography is None:
+            return
         for player in render_state.players:
-            self._draw_floor_point(painter, inverse_homography, player.left_foot, QColor("#ffd166"), 8)
-            self._draw_floor_point(painter, inverse_homography, player.right_foot, QColor("#ef476f"), 8)
-            self._draw_floor_point(painter, inverse_homography, player.standing_point, QColor("#00d1ff"), 11)
+            self._draw_floor_point(
+                painter, inverse_homography, player.left_foot, QColor("#ffd166"), 8
+            )
+            self._draw_floor_point(
+                painter, inverse_homography, player.right_foot, QColor("#ef476f"), 8
+            )
+            self._draw_floor_point(
+                painter,
+                inverse_homography,
+                player.standing_point,
+                QColor("#00d1ff"),
+                11,
+            )
 
     def _draw_floor_point(
         self,
@@ -107,17 +128,33 @@ class OverlayRenderService:
         projected = cv2.perspectiveTransform(point_array, inverse_homography)[0][0]
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(color)
-        painter.drawEllipse(QPointF(float(projected[0]), float(projected[1])), radius, radius)
+        painter.drawEllipse(
+            QPointF(float(projected[0]), float(projected[1])), radius, radius
+        )
 
-    def _draw_hud(self, painter: QPainter, render_state: RenderState, width: int, height: int) -> None:
+    def _draw_hud(
+        self, painter: QPainter, render_state: RenderState, width: int, height: int
+    ) -> None:
         painter.setFont(QFont("Sans Serif", 14))
         self._draw_outlined_text(painter, 24, 36, f"Status: {render_state.status_text}")
         self._draw_outlined_text(painter, 24, 64, f"Phase: {render_state.phase.name}")
         self._draw_outlined_text(painter, 24, 92, f"Timer: {render_state.timer_text}")
-        self._draw_outlined_text(painter, 24, 120, f"Camera: {render_state.camera_status_text}")
-        self._draw_outlined_text(painter, 24, 148, f"Pose: {render_state.pose_status_text}")
-        self._draw_outlined_text(painter, 24, 176, f"Display: {render_state.display_status_text}")
-        self._draw_outlined_text(painter, 24, 204, f"Calibration: {render_state.calibration_status_text}", QColor("#ffd166"))
+        self._draw_outlined_text(
+            painter, 24, 120, f"Camera: {render_state.camera_status_text}"
+        )
+        self._draw_outlined_text(
+            painter, 24, 148, f"Pose: {render_state.pose_status_text}"
+        )
+        self._draw_outlined_text(
+            painter, 24, 176, f"Display: {render_state.display_status_text}"
+        )
+        self._draw_outlined_text(
+            painter,
+            24,
+            204,
+            f"Calibration: {render_state.calibration_status_text}",
+            QColor("#ffd166"),
+        )
 
         for index, player in enumerate(render_state.players, start=1):
             self._draw_outlined_text(
@@ -156,8 +193,12 @@ class OverlayRenderService:
             [[[x, y]], [[x + width, y]], [[x + width, y + height]], [[x, y + height]]],
             dtype=np.float32,
         )
-        image_points = cv2.perspectiveTransform(floor_points, inverse_homography).reshape(-1, 2)
-        return QPolygonF([QPointF(float(point[0]), float(point[1])) for point in image_points])
+        image_points = cv2.perspectiveTransform(
+            floor_points, inverse_homography
+        ).reshape(-1, 2)
+        return QPolygonF(
+            [QPointF(float(point[0]), float(point[1])) for point in image_points]
+        )
 
     def _cell_fill_color(self, state: CellState) -> QColor:
         if state is CellState.GREEN:
@@ -165,5 +206,5 @@ class OverlayRenderService:
         if state is CellState.RED:
             return QColor(231, 76, 60, 110)
         if state is CellState.FLASHING:
-            return QColor(241, 196, 15, 90)
+            return QColor(*FLASHING_CELL_COLOR, FLASHING_CELL_ALPHA)
         return QColor(127, 140, 141, 70)

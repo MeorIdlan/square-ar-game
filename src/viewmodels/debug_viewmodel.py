@@ -4,14 +4,14 @@ from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtGui import QImage
 
 from src.models.contracts import RenderState
-from src.services.debug_render_service import DebugRenderService
+from src.services.protocols import DebugRenderServiceProtocol
 
 
 class DebugViewModel(QObject):
     image_updated = pyqtSignal(QImage)
     render_requested = pyqtSignal(object)
 
-    def __init__(self, render_service: DebugRenderService) -> None:
+    def __init__(self, render_service: DebugRenderServiceProtocol) -> None:
         super().__init__()
         self._render_service = render_service
 

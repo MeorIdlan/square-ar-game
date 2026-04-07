@@ -8,13 +8,16 @@ import numpy as np
 from src.models.calibration_model import CalibrationModel
 from src.models.contracts import CellIndex, MappedPlayerState, Point, PoseFootState
 from src.models.grid_model import GridModel
+from src.utils.constants import BOUNDARY_TOLERANCE
 
 
 class FloorMappingService:
-    def __init__(self, boundary_tolerance: float = 1e-6) -> None:
+    def __init__(self, boundary_tolerance: float = BOUNDARY_TOLERANCE) -> None:
         self._boundary_tolerance = boundary_tolerance
 
-    def resolve_feet_midpoint(self, left_foot: Point | None, right_foot: Point | None) -> Point | None:
+    def resolve_feet_midpoint(
+        self, left_foot: Point | None, right_foot: Point | None
+    ) -> Point | None:
         if left_foot and right_foot:
             return (
                 (left_foot[0] + right_foot[0]) / 2.0,
@@ -33,7 +36,9 @@ class FloorMappingService:
         right_foot = self.map_image_point_to_floor(pose_state.right_foot, calibration)
         standing_point = self.resolve_feet_midpoint(left_foot, right_foot)
         occupied_cell = self.resolve_cell(standing_point, grid, calibration)
-        in_bounds = standing_point is not None and self.is_inside_playable_area(standing_point, calibration)
+        in_bounds = standing_point is not None and self.is_inside_playable_area(
+            standing_point, calibration
+        )
         ambiguous = in_bounds and occupied_cell is None
         return MappedPlayerState(
             player_id=player_id,
@@ -46,7 +51,9 @@ class FloorMappingService:
             confidence=pose_state.confidence,
         )
 
-    def map_image_point_to_floor(self, point: Point | None, calibration: CalibrationModel) -> Point | None:
+    def map_image_point_to_floor(
+        self, point: Point | None, calibration: CalibrationModel
+    ) -> Point | None:
         if point is None or calibration.homography is None:
             return None
 
@@ -54,7 +61,9 @@ class FloorMappingService:
         mapped = cv2.perspectiveTransform(point_array, calibration.homography)[0][0]
         return float(mapped[0]), float(mapped[1])
 
-    def is_inside_playable_area(self, point: Point, calibration: CalibrationModel) -> bool:
+    def is_inside_playable_area(
+        self, point: Point, calibration: CalibrationModel
+    ) -> bool:
         if calibration.playable_bounds is None:
             return False
 
@@ -88,7 +97,9 @@ class FloorMappingService:
         x, y = point
         relative_x = x - min_x
         relative_y = y - min_y
-        if isclose(relative_x % cell_width, 0.0, abs_tol=self._boundary_tolerance) or isclose(
+        if isclose(
+            relative_x % cell_width, 0.0, abs_tol=self._boundary_tolerance
+        ) or isclose(
             relative_y % cell_height,
             0.0,
             abs_tol=self._boundary_tolerance,

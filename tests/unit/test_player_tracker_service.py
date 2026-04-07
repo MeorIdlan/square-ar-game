@@ -15,11 +15,17 @@ class PlayerTrackerServiceTests(unittest.TestCase):
     def test_creates_stable_ids_for_new_players(self) -> None:
         players: dict[str, PlayerModel] = {}
         detections = [
-            MappedPlayerState(player_id="d1", standing_point=(0.5, 0.5), in_bounds=True),
-            MappedPlayerState(player_id="d2", standing_point=(2.0, 2.0), in_bounds=True),
+            MappedPlayerState(
+                player_id="d1", standing_point=(0.5, 0.5), in_bounds=True
+            ),
+            MappedPlayerState(
+                player_id="d2", standing_point=(2.0, 2.0), in_bounds=True
+            ),
         ]
 
-        self.service.update_players(players, detections, timestamp=10.0, grace_period_seconds=0.35)
+        self.service.update_players(
+            players, detections, timestamp=10.0, grace_period_seconds=0.35
+        )
 
         self.assertEqual(set(players.keys()), {"P1", "P2"})
         self.assertEqual(players["P1"].tracking_state, PlayerTrackingState.ACTIVE)
@@ -27,15 +33,29 @@ class PlayerTrackerServiceTests(unittest.TestCase):
 
     def test_matches_nearest_existing_players(self) -> None:
         players = {
-            "P1": PlayerModel(player_id="P1", standing_point=(1.0, 1.0), tracking_state=PlayerTrackingState.ACTIVE),
-            "P2": PlayerModel(player_id="P2", standing_point=(3.0, 3.0), tracking_state=PlayerTrackingState.ACTIVE),
+            "P1": PlayerModel(
+                player_id="P1",
+                standing_point=(1.0, 1.0),
+                tracking_state=PlayerTrackingState.ACTIVE,
+            ),
+            "P2": PlayerModel(
+                player_id="P2",
+                standing_point=(3.0, 3.0),
+                tracking_state=PlayerTrackingState.ACTIVE,
+            ),
         }
         detections = [
-            MappedPlayerState(player_id="d1", standing_point=(1.2, 1.1), in_bounds=True),
-            MappedPlayerState(player_id="d2", standing_point=(3.2, 2.9), in_bounds=True),
+            MappedPlayerState(
+                player_id="d1", standing_point=(1.2, 1.1), in_bounds=True
+            ),
+            MappedPlayerState(
+                player_id="d2", standing_point=(3.2, 2.9), in_bounds=True
+            ),
         ]
 
-        self.service.update_players(players, detections, timestamp=12.0, grace_period_seconds=0.35)
+        self.service.update_players(
+            players, detections, timestamp=12.0, grace_period_seconds=0.35
+        )
 
         self.assertAlmostEqual(players["P1"].standing_point[0], 1.2)
         self.assertAlmostEqual(players["P2"].standing_point[0], 3.2)
@@ -50,7 +70,9 @@ class PlayerTrackerServiceTests(unittest.TestCase):
             )
         }
 
-        self.service.update_players(players, [], timestamp=10.2, grace_period_seconds=0.35)
+        self.service.update_players(
+            players, [], timestamp=10.2, grace_period_seconds=0.35
+        )
 
         self.assertEqual(players["P1"].tracking_state, PlayerTrackingState.ACTIVE)
         self.assertEqual(players["P1"].standing_point, (1.0, 1.0))
@@ -65,7 +87,9 @@ class PlayerTrackerServiceTests(unittest.TestCase):
             )
         }
 
-        self.service.update_players(players, [], timestamp=10.5, grace_period_seconds=0.35)
+        self.service.update_players(
+            players, [], timestamp=10.5, grace_period_seconds=0.35
+        )
 
         self.assertEqual(players["P1"].tracking_state, PlayerTrackingState.MISSING)
         self.assertIsNone(players["P1"].standing_point)
@@ -79,9 +103,13 @@ class PlayerTrackerServiceTests(unittest.TestCase):
                 last_seen_at=10.0,
             )
         }
-        detections = [MappedPlayerState(player_id="d1", standing_point=(1.5, 1.5), in_bounds=True)]
+        detections = [
+            MappedPlayerState(player_id="d1", standing_point=(1.5, 1.5), in_bounds=True)
+        ]
 
-        self.service.update_players(players, detections, timestamp=10.6, grace_period_seconds=0.35)
+        self.service.update_players(
+            players, detections, timestamp=10.6, grace_period_seconds=0.35
+        )
 
         self.assertEqual(set(players.keys()), {"P1"})
         self.assertEqual(players["P1"].tracking_state, PlayerTrackingState.ACTIVE)
@@ -89,11 +117,56 @@ class PlayerTrackerServiceTests(unittest.TestCase):
 
     def test_does_not_allocate_player_for_unmappable_detection(self) -> None:
         players: dict[str, PlayerModel] = {}
-        detections = [MappedPlayerState(player_id="d1", standing_point=None, in_bounds=False)]
+        detections = [
+            MappedPlayerState(player_id="d1", standing_point=None, in_bounds=False)
+        ]
 
-        self.service.update_players(players, detections, timestamp=10.0, grace_period_seconds=0.35)
+        self.service.update_players(
+            players, detections, timestamp=10.0, grace_period_seconds=0.35
+        )
 
         self.assertEqual(players, {})
+
+    def test_exact_boundary_1_249_matched(self) -> None:
+        service = PlayerTrackerService(max_match_distance=1.25)
+        players = {
+            "P1": PlayerModel(
+                player_id="P1",
+                standing_point=(0.0, 0.0),
+                tracking_state=PlayerTrackingState.ACTIVE,
+            ),
+        }
+        # distance = sqrt(1.0^2 + 0.748^2) ≈ 1.249
+        detections = [
+            MappedPlayerState(
+                player_id="d1", standing_point=(1.0, 0.748), in_bounds=True
+            )
+        ]
+        service.update_players(
+            players, detections, timestamp=10.0, grace_period_seconds=0.35
+        )
+        self.assertAlmostEqual(players["P1"].standing_point[0], 1.0)
+
+    def test_exact_boundary_1_251_not_matched(self) -> None:
+        service = PlayerTrackerService(max_match_distance=1.25)
+        players = {
+            "P1": PlayerModel(
+                player_id="P1",
+                standing_point=(0.0, 0.0),
+                tracking_state=PlayerTrackingState.ACTIVE,
+            ),
+        }
+        # distance = sqrt(1.0^2 + 0.752^2) ≈ 1.251
+        detections = [
+            MappedPlayerState(
+                player_id="d1", standing_point=(1.0, 0.752), in_bounds=True
+            )
+        ]
+        service.update_players(
+            players, detections, timestamp=10.0, grace_period_seconds=0.35
+        )
+        # P1 should be kept at old position (not matched), and a new player P2 should be created
+        self.assertIn("P2", players)
 
 
 if __name__ == "__main__":

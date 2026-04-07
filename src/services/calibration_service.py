@@ -10,6 +10,7 @@ import numpy as np
 from src.models.calibration_model import CalibrationModel
 from src.models.enums import CalibrationState
 from src.utils.config import AppConfig
+from src.utils.constants import REPROJECTION_ERROR_THRESHOLD
 
 
 class CalibrationService:
@@ -73,7 +74,9 @@ class CalibrationService:
 
         if not is_live_source:
             detail = source_error or "Live camera feed unavailable."
-            self._logger.warning("Calibration rejected because live camera is unavailable: %s", detail)
+            self._logger.warning(
+                "Calibration rejected because live camera is unavailable: %s", detail
+            )
             return replace(
                 model,
                 state=CalibrationState.INVALID,
@@ -88,7 +91,9 @@ class CalibrationService:
             )
 
         detected_markers = self.detect_markers(frame)
-        self._logger.info("Calibration marker detection found %s marker(s)", len(detected_markers))
+        self._logger.info(
+            "Calibration marker detection found %s marker(s)", len(detected_markers)
+        )
         return self.calibrate_from_detected_markers(model, detected_markers)
 
     def reset(self, model: CalibrationModel) -> CalibrationModel:
@@ -104,13 +109,17 @@ class CalibrationService:
 
     def detect_markers(self, frame: np.ndarray) -> dict[int, np.ndarray]:
         grayscale = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        detector = cv2.aruco.ArucoDetector(self._aruco_dictionary(), self._detector_parameters)
+        detector = cv2.aruco.ArucoDetector(
+            self._aruco_dictionary(), self._detector_parameters
+        )
         corners, ids, _ = detector.detectMarkers(grayscale)
         if ids is None:
             return {}
 
         detected: dict[int, np.ndarray] = {}
-        for marker_id, marker_corners in zip(ids.flatten().tolist(), corners, strict=False):
+        for marker_id, marker_corners in zip(
+            ids.flatten().tolist(), corners, strict=False
+        ):
             detected[int(marker_id)] = np.asarray(marker_corners[0], dtype=np.float32)
         return detected
 
@@ -123,7 +132,12 @@ class CalibrationService:
         playable_height = self._config.grid.playable_height
         inset = self._config.grid.playable_inset
 
-        outer = ((0.0, 0.0), (playable_width, 0.0), (playable_width, playable_height), (0.0, playable_height))
+        outer = (
+            (0.0, 0.0),
+            (playable_width, 0.0),
+            (playable_width, playable_height),
+            (0.0, playable_height),
+        )
         inner = (
             (inset, inset),
             (playable_width - inset, inset),
@@ -132,7 +146,9 @@ class CalibrationService:
         )
 
         required_ids = tuple(self._config.marker_ids)
-        missing_ids = [marker_id for marker_id in required_ids if marker_id not in detected_markers]
+        missing_ids = [
+            marker_id for marker_id in required_ids if marker_id not in detected_markers
+        ]
         if missing_ids:
             self._logger.warning("Calibration missing marker ids: %s", missing_ids)
             return replace(
@@ -149,7 +165,9 @@ class CalibrationService:
             )
 
         if not self._is_rectangle_valid(outer) or not self._is_rectangle_valid(inner):
-            self._logger.error("Calibration rejected because configured playable rectangle is invalid")
+            self._logger.error(
+                "Calibration rejected because configured playable rectangle is invalid"
+            )
             return replace(
                 model,
                 state=CalibrationState.INVALID,
@@ -161,14 +179,19 @@ class CalibrationService:
             )
 
         marker_centers = np.array(
-            [self._marker_center(detected_markers[marker_id]) for marker_id in required_ids],
+            [
+                self._marker_center(detected_markers[marker_id])
+                for marker_id in required_ids
+            ],
             dtype=np.float32,
         )
         image_points = self._order_corners(marker_centers)
         world_points = np.array(outer, dtype=np.float32)
 
         if not self._is_quadrilateral_convex(image_points):
-            self._logger.warning("Calibration rejected because detected markers are not convex")
+            self._logger.warning(
+                "Calibration rejected because detected markers are not convex"
+            )
             return replace(
                 model,
                 state=CalibrationState.INVALID,
@@ -181,7 +204,9 @@ class CalibrationService:
 
         homography, mask = cv2.findHomography(image_points, world_points, method=0)
         if homography is None or mask is None:
-            self._logger.error("Calibration failed because homography computation returned no result")
+            self._logger.error(
+                "Calibration failed because homography computation returned no result"
+            )
             return replace(
                 model,
                 state=CalibrationState.INVALID,
@@ -192,9 +217,17 @@ class CalibrationService:
                 validation_message="Unable to compute homography from detected markers.",
             )
 
-        reprojection_error = self._mean_reprojection_error(homography, image_points, world_points)
-        if not np.isfinite(reprojection_error) or reprojection_error > 0.15:
-            self._logger.warning("Calibration rejected due to reprojection error %.3f", reprojection_error)
+        reprojection_error = self._mean_reprojection_error(
+            homography, image_points, world_points
+        )
+        if (
+            not np.isfinite(reprojection_error)
+            or reprojection_error > REPROJECTION_ERROR_THRESHOLD
+        ):
+            self._logger.warning(
+                "Calibration rejected due to reprojection error %.3f",
+                reprojection_error,
+            )
             return replace(
                 model,
                 state=CalibrationState.INVALID,
@@ -205,12 +238,15 @@ class CalibrationService:
                 validation_message=f"Calibration rejected due to reprojection error ({reprojection_error:.3f}).",
             )
 
-        self._logger.info("Calibration succeeded with dictionary %s", self._dictionary_name())
+        self._logger.info(
+            "Calibration succeeded with dictionary %s", self._dictionary_name()
+        )
         return replace(
             model,
             state=CalibrationState.VALID,
             detected_marker_corners=detected_markers,
             homography=homography,
+            inverse_homography=np.linalg.inv(homography),
             outer_bounds=outer,
             playable_bounds=inner,
             validation_message=f"Calibration locked using {self._dictionary_name()} and all 4 ArUco markers.",
@@ -260,10 +296,16 @@ class CalibrationService:
 
         top_left, top_right = top
         bottom_left, bottom_right = bottom
-        return np.array([top_left, top_right, bottom_right, bottom_left], dtype=np.float32)
+        return np.array(
+            [top_left, top_right, bottom_right, bottom_left], dtype=np.float32
+        )
 
     @staticmethod
-    def _mean_reprojection_error(homography: np.ndarray, image_points: np.ndarray, world_points: np.ndarray) -> float:
-        transformed = cv2.perspectiveTransform(image_points.reshape(-1, 1, 2), homography).reshape(-1, 2)
+    def _mean_reprojection_error(
+        homography: np.ndarray, image_points: np.ndarray, world_points: np.ndarray
+    ) -> float:
+        transformed = cv2.perspectiveTransform(
+            image_points.reshape(-1, 1, 2), homography
+        ).reshape(-1, 2)
         error = np.linalg.norm(transformed - world_points, axis=1)
         return float(error.mean())

@@ -43,15 +43,26 @@ class GameEngineServiceTests(unittest.TestCase):
         self.engine.start_round(self.session)
         self.assertEqual(self.session.round_state.phase, RoundPhase.FLASHING)
         self.assertEqual(self.session.round_state.participant_ids, ["P1", "P2"])
-        self.assertTrue(all(state in (CellState.GREEN, CellState.RED) for state in self.session.grid.cell_states.values()))
+        states = self.session.grid.cell_states.values()
+        self.assertTrue(all(s in (CellState.GREEN, CellState.RED) for s in states))
 
     def test_evaluate_round_eliminates_red_and_invalid_players(self) -> None:
         self.engine.start_round(self.session)
         self.session.grid.cell_states[(0, 0)] = CellState.GREEN
         self.session.grid.cell_states[(1, 1)] = CellState.RED
         mapped_players = [
-            MappedPlayerState(player_id="P1", standing_point=(0.5, 0.5), occupied_cell=(0, 0), in_bounds=True),
-            MappedPlayerState(player_id="P2", standing_point=(1.5, 1.5), occupied_cell=(1, 1), in_bounds=True),
+            MappedPlayerState(
+                player_id="P1",
+                standing_point=(0.5, 0.5),
+                occupied_cell=(0, 0),
+                in_bounds=True,
+            ),
+            MappedPlayerState(
+                player_id="P2",
+                standing_point=(1.5, 1.5),
+                occupied_cell=(1, 1),
+                in_bounds=True,
+            ),
         ]
 
         self.engine.evaluate_round(self.session, mapped_players)
@@ -79,7 +90,9 @@ class GameEngineServiceTests(unittest.TestCase):
         self.engine.evaluate_round(self.session)
 
         self.assertIn("P2", self.session.round_state.eliminated_ids)
-        self.assertEqual(self.session.players["P2"].tracking_state, PlayerTrackingState.ELIMINATED)
+        self.assertEqual(
+            self.session.players["P2"].tracking_state, PlayerTrackingState.ELIMINATED
+        )
 
     def test_operator_override_can_revive_player(self) -> None:
         self.engine.start_round(self.session)
@@ -101,6 +114,44 @@ class GameEngineServiceTests(unittest.TestCase):
         self.engine.tick(self.session, 0.3)
 
         self.assertEqual(self.session.round_state.phase, RoundPhase.PREPARING)
+
+    def test_single_player_auto_win(self) -> None:
+        self.session.players = {
+            "P1": PlayerModel(
+                player_id="P1",
+                tracking_state=PlayerTrackingState.ACTIVE,
+                standing_point=(0.5, 0.5),
+                occupied_cell=(0, 0),
+            ),
+        }
+        self.engine.start_round(self.session)
+        self.assertEqual(self.session.winner_id, "P1")
+        self.assertEqual(self.session.app_state, AppState.FINISHED)
+        self.assertEqual(self.session.round_state.phase, RoundPhase.FINISHED)
+
+    def test_flashing_randomization_reproducible_with_seed(self) -> None:
+        engine1 = GameEngineService(seed=42)
+        engine2 = GameEngineService(seed=42)
+        session1 = GameSessionModel()
+        session2 = GameSessionModel()
+        session1.grid = self.session.grid
+        session2.grid = self.session.grid
+        session1.grid.reset_states()
+        session2.grid.reset_states()
+        engine1.randomize_flashing_pattern(session1)
+        engine2.randomize_flashing_pattern(session2)
+        self.assertEqual(session1.grid.cell_states, session2.grid.cell_states)
+
+    def test_no_active_participants_rejects_start(self) -> None:
+        self.session.players = {
+            "P1": PlayerModel(
+                player_id="P1",
+                tracking_state=PlayerTrackingState.MISSING,
+                occupied_cell=None,
+            ),
+        }
+        self.engine.start_round(self.session)
+        self.assertEqual(self.session.round_state.phase, RoundPhase.IDLE)
 
 
 if __name__ == "__main__":

@@ -5,13 +5,17 @@ from PyQt6.QtCore import QObject, pyqtSignal
 from src.models.contracts import FramePacket
 
 from src.models.calibration_model import CalibrationModel
-from src.services.calibration_service import CalibrationService
+from src.services.protocols import CalibrationServiceProtocol
 
 
 class CalibrationViewModel(QObject):
     calibration_updated = pyqtSignal(object)
 
-    def __init__(self, calibration_service: CalibrationService, calibration_model: CalibrationModel) -> None:
+    def __init__(
+        self,
+        calibration_service: CalibrationServiceProtocol,
+        calibration_model: CalibrationModel,
+    ) -> None:
         super().__init__()
         self._calibration_service = calibration_service
         self._calibration_model = calibration_model
@@ -31,5 +35,7 @@ class CalibrationViewModel(QObject):
         self.calibration_updated.emit(self._calibration_model)
 
     def reset(self) -> None:
-        self._calibration_model = self._calibration_service.reset(self._calibration_model)
+        self._calibration_model = self._calibration_service.reset(
+            self._calibration_model
+        )
         self.calibration_updated.emit(self._calibration_model)
