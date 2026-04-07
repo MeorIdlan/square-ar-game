@@ -36,7 +36,9 @@ class CameraServiceProtocol(Protocol):
 
     def set_camera_profile(self, profile: CameraProfile) -> None: ...
 
-    def available_camera_indices(self, max_index: int = 5) -> list[int]: ...
+    def available_camera_indices(
+        self, max_index: int = 5, probe: bool = True
+    ) -> list[int]: ...
 
     def available_camera_profiles(
         self, camera_index: int | None = None, probe: bool = False

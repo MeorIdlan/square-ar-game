@@ -65,11 +65,15 @@ class MainWindow(QMainWindow):
 
         self._camera_profile_combo = QComboBox()
         self._populate_camera_profile_choices()
-        self._camera_profile_combo.currentIndexChanged.connect(self._on_camera_profile_changed)
+        self._camera_profile_combo.currentIndexChanged.connect(
+            self._on_camera_profile_changed
+        )
         controls_layout.addRow("Camera Mode", self._camera_profile_combo)
 
         refresh_camera_modes_button = QPushButton("Refresh Camera Modes")
-        refresh_camera_modes_button.clicked.connect(self._refresh_camera_profile_choices)
+        refresh_camera_modes_button.clicked.connect(
+            self._refresh_camera_profile_choices
+        )
         controls_layout.addRow(refresh_camera_modes_button)
 
         self._display_combo = QComboBox()
@@ -83,7 +87,9 @@ class MainWindow(QMainWindow):
 
         self._aruco_dictionary_combo = QComboBox()
         self._populate_aruco_dictionary_choices()
-        self._aruco_dictionary_combo.currentIndexChanged.connect(self._on_aruco_dictionary_changed)
+        self._aruco_dictionary_combo.currentIndexChanged.connect(
+            self._on_aruco_dictionary_changed
+        )
         controls_layout.addRow("ArUco Dictionary", self._aruco_dictionary_combo)
 
         self._pose_model_combo = QComboBox()
@@ -154,13 +160,48 @@ class MainWindow(QMainWindow):
 
         timings_box = QGroupBox("Timing")
         timings_layout = QFormLayout(timings_box)
-        self._add_timing_spinbox(timings_layout, "Flashing", "flashing_duration_seconds", self._viewmodel.config.timings.flashing_duration_seconds)
-        self._add_timing_spinbox(timings_layout, "Flash Interval", "flash_interval_seconds", self._viewmodel.config.timings.flash_interval_seconds)
-        self._add_timing_spinbox(timings_layout, "Reaction", "reaction_window_seconds", self._viewmodel.config.timings.reaction_window_seconds)
-        self._add_timing_spinbox(timings_layout, "Check Delay", "lock_delay_seconds", self._viewmodel.config.timings.lock_delay_seconds)
-        self._add_timing_spinbox(timings_layout, "Results", "elimination_display_seconds", self._viewmodel.config.timings.elimination_display_seconds)
-        self._add_timing_spinbox(timings_layout, "Inter-Round", "inter_round_delay_seconds", self._viewmodel.config.timings.inter_round_delay_seconds)
-        self._add_timing_spinbox(timings_layout, "Missing Grace", "missed_detection_grace_seconds", self._viewmodel.config.timings.missed_detection_grace_seconds)
+        self._add_timing_spinbox(
+            timings_layout,
+            "Flashing",
+            "flashing_duration_seconds",
+            self._viewmodel.config.timings.flashing_duration_seconds,
+        )
+        self._add_timing_spinbox(
+            timings_layout,
+            "Flash Interval",
+            "flash_interval_seconds",
+            self._viewmodel.config.timings.flash_interval_seconds,
+        )
+        self._add_timing_spinbox(
+            timings_layout,
+            "Reaction",
+            "reaction_window_seconds",
+            self._viewmodel.config.timings.reaction_window_seconds,
+        )
+        self._add_timing_spinbox(
+            timings_layout,
+            "Check Delay",
+            "lock_delay_seconds",
+            self._viewmodel.config.timings.lock_delay_seconds,
+        )
+        self._add_timing_spinbox(
+            timings_layout,
+            "Results",
+            "elimination_display_seconds",
+            self._viewmodel.config.timings.elimination_display_seconds,
+        )
+        self._add_timing_spinbox(
+            timings_layout,
+            "Inter-Round",
+            "inter_round_delay_seconds",
+            self._viewmodel.config.timings.inter_round_delay_seconds,
+        )
+        self._add_timing_spinbox(
+            timings_layout,
+            "Missing Grace",
+            "missed_detection_grace_seconds",
+            self._viewmodel.config.timings.missed_detection_grace_seconds,
+        )
         layout.addWidget(timings_box, 1, 0)
 
         overrides_box = QGroupBox("Overrides")
@@ -208,12 +249,26 @@ class MainWindow(QMainWindow):
         self._camera_health_label.setText(session_model.camera_status_message)
         self._pose_health_label.setText(session_model.pose_status_message)
         self._display_health_label.setText(session_model.display_status_message)
-        visible_ids = ", ".join(str(marker_id) for marker_id in session_model.calibration.detected_marker_ids) or "none"
-        missing_ids = ", ".join(str(marker_id) for marker_id in session_model.calibration.missing_marker_ids) or "none"
+        visible_ids = (
+            ", ".join(
+                str(marker_id)
+                for marker_id in session_model.calibration.detected_marker_ids
+            )
+            or "none"
+        )
+        missing_ids = (
+            ", ".join(
+                str(marker_id)
+                for marker_id in session_model.calibration.missing_marker_ids
+            )
+            or "none"
+        )
         self._calibration_markers_label.setText(
             f"{session_model.calibration.detected_marker_count} visible | visible: {visible_ids} | missing: {missing_ids}"
         )
-        self._calibration_message_label.setText(session_model.calibration.validation_message)
+        self._calibration_message_label.setText(
+            session_model.calibration.validation_message
+        )
         current_selection = self._player_combo.currentText()
         player_ids = sorted(session_model.players.keys())
         self._player_combo.blockSignals(True)
@@ -223,24 +278,30 @@ class MainWindow(QMainWindow):
             self._player_combo.setCurrentText(current_selection)
         self._player_combo.blockSignals(False)
 
-    def _add_timing_spinbox(self, layout: QFormLayout, label: str, field_name: str, value: float) -> None:
+    def _add_timing_spinbox(
+        self, layout: QFormLayout, label: str, field_name: str, value: float
+    ) -> None:
         spinbox = QDoubleSpinBox()
         spinbox.setRange(0.05, 30.0)
         spinbox.setSingleStep(0.05)
         spinbox.setDecimals(2)
         spinbox.setValue(value)
-        spinbox.valueChanged.connect(lambda new_value, name=field_name: self._viewmodel.update_timing_setting(name, new_value))
+        spinbox.valueChanged.connect(
+            lambda new_value, name=field_name: self._viewmodel.update_timing_setting(
+                name, new_value
+            )
+        )
         layout.addRow(label, spinbox)
 
     def _selected_player_id(self) -> str | None:
         player_id = self._player_combo.currentText().strip()
         return player_id or None
 
-    def _populate_camera_choices(self) -> None:
+    def _populate_camera_choices(self, probe: bool = False) -> None:
         current_index = self._viewmodel.config.camera.camera_index
         self._camera_combo.blockSignals(True)
         self._camera_combo.clear()
-        for camera_index in self._viewmodel.available_camera_indices():
+        for camera_index in self._viewmodel.available_camera_indices(probe=probe):
             self._camera_combo.addItem(f"Camera {camera_index}", camera_index)
         selected_index = self._camera_combo.findData(current_index)
         if selected_index >= 0:
@@ -344,7 +405,7 @@ class MainWindow(QMainWindow):
 
     def _refresh_camera_choices(self) -> None:
         self._viewmodel.refresh_camera_sources()
-        self._populate_camera_choices()
+        self._populate_camera_choices(probe=True)
         self._populate_camera_profile_choices()
 
     def _refresh_camera_profile_choices(self) -> None:

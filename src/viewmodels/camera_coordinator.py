@@ -20,8 +20,8 @@ class CameraCoordinator(QObject):
         self._camera_service = camera_service
         self._logger = logging.getLogger(__name__)
 
-    def available_camera_indices(self) -> list[int]:
-        return self._camera_service.available_camera_indices()
+    def available_camera_indices(self, probe: bool = True) -> list[int]:
+        return self._camera_service.available_camera_indices(probe=probe)
 
     def available_camera_profiles(self, probe: bool = False) -> list[CameraProfile]:
         return self._camera_service.available_camera_profiles(

@@ -152,8 +152,8 @@ class MainViewModel(QObject):
     def update_aruco_dictionary(self, dictionary_name: str) -> None:
         self._config_coordinator.update_aruco_dictionary(dictionary_name)
 
-    def available_camera_indices(self) -> list[int]:
-        return self._camera_coordinator.available_camera_indices()
+    def available_camera_indices(self, probe: bool = True) -> list[int]:
+        return self._camera_coordinator.available_camera_indices(probe=probe)
 
     def available_camera_profiles(self, probe: bool = False) -> list[CameraProfile]:
         return self._camera_coordinator.available_camera_profiles(probe=probe)

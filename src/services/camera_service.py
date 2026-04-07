@@ -50,8 +50,12 @@ class CameraService:
 
         capture = cv2.VideoCapture(self.settings.camera_index)
         if not capture.isOpened():
-            self._last_error_message = f"Unable to open camera index {self.settings.camera_index}."
-            self._logger.warning("Unable to open camera index %s", self.settings.camera_index)
+            self._last_error_message = (
+                f"Unable to open camera index {self.settings.camera_index}."
+            )
+            self._logger.warning(
+                "Unable to open camera index %s", self.settings.camera_index
+            )
             self._capture = None
             return False
 
@@ -67,7 +71,11 @@ class CameraService:
     def set_camera_index(self, camera_index: int) -> None:
         if camera_index == self.settings.camera_index:
             return
-        self._logger.info("Switching camera index from %s to %s", self.settings.camera_index, camera_index)
+        self._logger.info(
+            "Switching camera index from %s to %s",
+            self.settings.camera_index,
+            camera_index,
+        )
         self.release()
         self.settings.camera_index = camera_index
 
@@ -76,12 +84,20 @@ class CameraService:
         current_profile = self.settings.profile
         if current_profile == profile:
             return
-        self._logger.info("Switching camera profile from %s to %s", current_profile.label, requested_label)
+        self._logger.info(
+            "Switching camera profile from %s to %s",
+            current_profile.label,
+            requested_label,
+        )
         self.release()
         self.settings.apply_profile(profile)
 
-    def available_camera_profiles(self, camera_index: int | None = None, probe: bool = False) -> list[CameraProfile]:
-        probe_index = self.settings.camera_index if camera_index is None else camera_index
+    def available_camera_profiles(
+        self, camera_index: int | None = None, probe: bool = False
+    ) -> list[CameraProfile]:
+        probe_index = (
+            self.settings.camera_index if camera_index is None else camera_index
+        )
         profiles: list[CameraProfile] = []
 
         if probe:
@@ -99,7 +115,10 @@ class CameraService:
             profiles.append(current_profile)
 
         unique_profiles = sorted(
-            {(profile.width, profile.height, profile.fps): profile for profile in profiles}.values(),
+            {
+                (profile.width, profile.height, profile.fps): profile
+                for profile in profiles
+            }.values(),
             key=lambda profile: (profile.width * profile.height, profile.fps),
         )
         if probe:
@@ -117,7 +136,9 @@ class CameraService:
             )
         return unique_profiles
 
-    def _probe_profile(self, camera_index: int, profile: CameraProfile) -> CameraProfile | None:
+    def _probe_profile(
+        self, camera_index: int, profile: CameraProfile
+    ) -> CameraProfile | None:
         probe = cv2.VideoCapture(camera_index)
         if not probe.isOpened():
             probe.release()
@@ -132,26 +153,36 @@ class CameraService:
             return None
 
         actual_width = int(round(probe.get(cv2.CAP_PROP_FRAME_WIDTH))) or frame.shape[1]
-        actual_height = int(round(probe.get(cv2.CAP_PROP_FRAME_HEIGHT))) or frame.shape[0]
+        actual_height = (
+            int(round(probe.get(cv2.CAP_PROP_FRAME_HEIGHT))) or frame.shape[0]
+        )
         actual_fps = int(round(probe.get(cv2.CAP_PROP_FPS))) or profile.fps
         probe.release()
         return CameraProfile(actual_width, actual_height, actual_fps)
 
-    def available_camera_indices(self, max_index: int = 5) -> list[int]:
+    def available_camera_indices(
+        self, max_index: int = 5, probe: bool = True
+    ) -> list[int]:
         if sys.platform.startswith("linux"):
             linux_indices = self._linux_video_device_indices(max_index)
             if self.settings.camera_index not in linux_indices:
                 linux_indices.append(self.settings.camera_index)
             return sorted(set(linux_indices))
 
+        if not probe:
+            indices = list(range(max_index + 1))
+            if self.settings.camera_index not in indices:
+                indices.append(self.settings.camera_index)
+            return sorted(set(indices))
+
         available: list[int] = []
         for index in range(max_index + 1):
-            probe = cv2.VideoCapture(index)
-            if probe.isOpened():
+            cap = cv2.VideoCapture(index)
+            if cap.isOpened():
                 available.append(index)
-                probe.release()
+                cap.release()
                 continue
-            probe.release()
+            cap.release()
         if self.settings.camera_index not in available:
             available.append(self.settings.camera_index)
         return sorted(set(available))
@@ -175,7 +206,9 @@ class CameraService:
         self._is_live_source = False
 
     def reconnect(self) -> bool:
-        self._logger.info("Reconnect requested for camera index %s", self.settings.camera_index)
+        self._logger.info(
+            "Reconnect requested for camera index %s", self.settings.camera_index
+        )
         self.release()
         return self.open()
 
@@ -197,10 +230,17 @@ class CameraService:
                 self._latest_frame = frame.copy()
                 self._last_error_message = None
                 if not self._is_live_source:
-                    self._logger.info("Camera index %s is now delivering live frames", self.settings.camera_index)
+                    self._logger.info(
+                        "Camera index %s is now delivering live frames",
+                        self.settings.camera_index,
+                    )
                 actual_profile = self._frame_profile(frame)
                 if actual_profile.label != self._last_reported_profile_label:
-                    self._logger.info("Camera index %s active stream profile %s", self.settings.camera_index, actual_profile.label)
+                    self._logger.info(
+                        "Camera index %s active stream profile %s",
+                        self.settings.camera_index,
+                        actual_profile.label,
+                    )
                     self._last_reported_profile_label = actual_profile.label
                 self._is_live_source = True
                 return FramePacket(
@@ -209,17 +249,28 @@ class CameraService:
                     camera_index=self.settings.camera_index,
                     is_live=True,
                     source_name="camera",
-                    actual_fps=self._capture.get(cv2.CAP_PROP_FPS) if self._capture is not None else None,
+                    actual_fps=(
+                        self._capture.get(cv2.CAP_PROP_FPS)
+                        if self._capture is not None
+                        else None
+                    ),
                 )
 
-            self._last_error_message = f"Camera read failed for camera index {self.settings.camera_index}."
-            self._logger.warning("Camera read failed for camera index %s", self.settings.camera_index)
+            self._last_error_message = (
+                f"Camera read failed for camera index {self.settings.camera_index}."
+            )
+            self._logger.warning(
+                "Camera read failed for camera index %s", self.settings.camera_index
+            )
 
         frame = self._fallback_frame()
         self._frame_id += 1
         self._latest_frame = frame.copy()
         if self._is_live_source:
-            self._logger.warning("Camera index %s lost live frames; switching to fallback", self.settings.camera_index)
+            self._logger.warning(
+                "Camera index %s lost live frames; switching to fallback",
+                self.settings.camera_index,
+            )
         self._is_live_source = False
         return FramePacket(
             frame_id=self._frame_id,
@@ -233,7 +284,9 @@ class CameraService:
 
     @staticmethod
     def _frame_profile(frame: np.ndarray) -> CameraProfile:
-        return CameraProfile(width=int(frame.shape[1]), height=int(frame.shape[0]), fps=0)
+        return CameraProfile(
+            width=int(frame.shape[1]), height=int(frame.shape[0]), fps=0
+        )
 
     def _fallback_frame(self) -> np.ndarray:
         height = self.settings.frame_height
