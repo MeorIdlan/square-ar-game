@@ -22,7 +22,13 @@ class ProjectorWindow(QWidget):
 
     def set_image(self, image: QImage) -> None:
         pixmap = QPixmap.fromImage(image)
-        self._image_label.setPixmap(pixmap.scaled(self._image_label.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.FastTransformation))
+        self._image_label.setPixmap(
+            pixmap.scaled(
+                self._image_label.size(),
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.FastTransformation,
+            )
+        )
 
     def suppress_close_request(self, suppress: bool) -> None:
         self._suppress_close_request = suppress
@@ -34,10 +40,11 @@ class ProjectorWindow(QWidget):
 
         bounded_index = max(0, min(screen_index, len(screens) - 1))
         screen = screens[bounded_index]
-        self.windowHandle().setScreen(screen) if self.windowHandle() is not None else None
+        if self.windowHandle() is not None:
+            self.windowHandle().setScreen(screen)
         geometry = screen.availableGeometry()
-        self.setGeometry(geometry)
-        self.showFullScreen()
+        self.move(geometry.topLeft())
+        self.showMaximized()
 
     def closeEvent(self, event: QCloseEvent) -> None:
         if not self._suppress_close_request:
