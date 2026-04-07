@@ -28,17 +28,15 @@ class TestCameraCoordinator:
         coordinator, mock_camera = _make_coordinator()
         with qtbot.waitSignal(coordinator.camera_status_changed, timeout=1000):
             coordinator.reconnect()
-        mock_camera.reconnect.assert_called_once()
+        mock_camera.release.assert_called_once()
 
-    def test_reconnect_failure_emits_fallback(self, qtbot) -> None:
+    def test_reconnect_emits_waiting_status(self, qtbot) -> None:
         coordinator, mock_camera = _make_coordinator()
-        mock_camera.reconnect.return_value = False
-        mock_camera.last_error_message = "Camera not found"
         signals = []
         coordinator.camera_status_changed.connect(signals.append)
         coordinator.reconnect()
         assert len(signals) == 1
-        assert "Fallback" in signals[0]
+        assert "Waiting" in signals[0]
 
     def test_available_camera_profiles(self) -> None:
         coordinator, mock_camera = _make_coordinator()
@@ -55,3 +53,4 @@ class TestCameraCoordinator:
         coordinator, mock_camera = _make_coordinator()
         result = coordinator.refresh_sources()
         assert result == [0, 1]
+        mock_camera.available_camera_indices.assert_called_once_with(probe=False)

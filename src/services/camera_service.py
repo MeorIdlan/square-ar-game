@@ -279,8 +279,10 @@ class CameraService:
         return self._last_error_message
 
     def next_frame(self) -> FramePacket:
-        if self.open() and self._capture is not None:
-            ok, frame = self._capture.read()
+        self.open()
+        capture = self._capture
+        if capture is not None:
+            ok, frame = capture.read()
             if ok and frame is not None:
                 self._frame_id += 1
                 self._latest_frame = frame.copy()
@@ -305,11 +307,7 @@ class CameraService:
                     camera_index=self.settings.camera_index,
                     is_live=True,
                     source_name="camera",
-                    actual_fps=(
-                        self._capture.get(cv2.CAP_PROP_FPS)
-                        if self._capture is not None
-                        else None
-                    ),
+                    actual_fps=capture.get(cv2.CAP_PROP_FPS),
                 )
 
             self._last_error_message = (

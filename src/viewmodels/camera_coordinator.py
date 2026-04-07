@@ -39,33 +39,19 @@ class CameraCoordinator(QObject):
         self._config.camera.apply_profile(profile)
         self._camera_service.set_camera_profile(profile)
         self.capture_interval_changed.emit(self.target_interval_ms())
-        if self._camera_service.reconnect():
-            status = f"Camera {self._config.camera.camera_index} at {profile.label}"
-        else:
-            detail = (
-                self._camera_service.last_error_message
-                or "Live camera feed unavailable."
-            )
-            status = f"Fallback frame in use. {detail}"
-            self._logger.warning(
-                "Camera profile apply failed for %s: %s", profile.label, detail
-            )
+        status = f"Camera {self._config.camera.camera_index} set to {profile.label}. Waiting for live frames"
         self.camera_status_changed.emit(status)
 
     def reconnect(self) -> None:
-        if self._camera_service.reconnect():
-            status = f"Camera {self._config.camera.camera_index} reconnected. Waiting for live frame confirmation"
-        else:
-            detail = (
-                self._camera_service.last_error_message
-                or "Live camera feed unavailable."
-            )
-            status = f"Fallback frame in use. {detail}"
-            self._logger.warning("Camera reconnect failed: %s", detail)
+        self._camera_service.release()
+        status = f"Camera {self._config.camera.camera_index} reconnecting. Waiting for live frames"
+        self._logger.info(
+            "Camera reconnect requested for index %s", self._config.camera.camera_index
+        )
         self.camera_status_changed.emit(status)
 
     def refresh_sources(self) -> list[int]:
-        return self._camera_service.available_camera_indices()
+        return self._camera_service.available_camera_indices(probe=False)
 
     def target_interval_ms(self) -> int:
         return max(1, int(round(1000 / max(self._config.camera.target_fps, 1))))
