@@ -187,9 +187,9 @@ d3d::Color4 OverlayRenderService::cell_fill_color(CellState state)
     switch (state) {
         case CellState::GREEN:    return {46/255.f, 204/255.f, 113/255.f, 110/255.f};
         case CellState::RED:      return {231/255.f, 76/255.f, 60/255.f, 110/255.f};
-        case CellState::FLASHING: return {constants::FLASHING_CELL_COLOR[0]/255.f,
-                                          constants::FLASHING_CELL_COLOR[1]/255.f,
-                                          constants::FLASHING_CELL_COLOR[2]/255.f,
+        case CellState::FLASHING: return {constants::FLASHING_CELL_COLOR_R/255.f,
+                                          constants::FLASHING_CELL_COLOR_G/255.f,
+                                          constants::FLASHING_CELL_COLOR_B/255.f,
                                           constants::FLASHING_CELL_ALPHA/255.f};
         default:                  return {127/255.f, 140/255.f, 141/255.f, 70/255.f};
     }

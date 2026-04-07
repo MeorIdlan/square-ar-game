@@ -1,8 +1,8 @@
 #pragma once
 // Data transfer contracts — mirrors src/models/contracts.py
 
-#include "enums.h"
-#include "../utils/math_helpers.h"
+#include "models/enums.h"
+#include "utils/math_helpers.h"
 
 #include <optional>
 #include <string>

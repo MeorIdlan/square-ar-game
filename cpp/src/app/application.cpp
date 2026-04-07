@@ -325,8 +325,8 @@ ui::OperatorCallbacks Application::make_operator_callbacks()
     cb.reconnect_camera = [this]() {
         camera_service_->release();
         camera_service_->open(config_.camera.camera_index,
-                              config_.camera.width,
-                              config_.camera.height,
+                              config_.camera.frame_width,
+                              config_.camera.frame_height,
                               config_.camera.target_fps);
         session_.camera_status_message = "Camera reconnected";
     };
@@ -334,8 +334,8 @@ ui::OperatorCallbacks Application::make_operator_callbacks()
     cb.set_camera_index = [this](int idx) {
         config_.camera.camera_index = idx;
         camera_service_->release();
-        camera_service_->open(idx, config_.camera.width,
-                              config_.camera.height,
+        camera_service_->open(idx, config_.camera.frame_width,
+                              config_.camera.frame_height,
                               config_.camera.target_fps);
         session_.camera_status_message = std::format("Camera switched to {}", idx);
     };

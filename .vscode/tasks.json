@@ -1,0 +1,59 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "CMake: configure",
+			"type": "shell",
+			"command": "cmake",
+			"args": [
+				"-B", "${workspaceFolder}/cpp/build",
+				"-S", "${workspaceFolder}/cpp",
+				"-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+				"-DCMAKE_TOOLCHAIN_FILE=${env:VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+				"-DCMAKE_BUILD_TYPE=Release"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}/cpp"
+			},
+			"problemMatcher": ["$gcc"],
+			"group": "build",
+			"detail": "Configure CMake and generate compile_commands.json"
+		},
+		{
+			"label": "CMake: build",
+			"type": "shell",
+			"command": "cmake",
+			"args": [
+				"--build", "${workspaceFolder}/cpp/build",
+				"--config", "Release",
+				"--parallel"
+			],
+			"dependsOn": "CMake: configure",
+			"options": {
+				"cwd": "${workspaceFolder}/cpp"
+			},
+			"problemMatcher": ["$msCompile"],
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			},
+			"detail": "Build all C++ targets"
+		},
+		{
+			"label": "CMake: test",
+			"type": "shell",
+			"command": "ctest",
+			"args": [
+				"--test-dir", "${workspaceFolder}/cpp/build",
+				"--output-on-failure",
+				"-C", "Release"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}/cpp"
+			},
+			"problemMatcher": [],
+			"group": "test",
+			"detail": "Run C++ tests with CTest"
+		}
+	]
+}

@@ -1,0 +1,42 @@
+{
+    "configurations": [
+        {
+            "name": "Win32",
+            "includePath": [
+                "${workspaceFolder}/cpp/src",
+                "${env:VCPKG_ROOT}/installed/x64-windows/include"
+            ],
+            "defines": [
+                "_WIN32",
+                "WIN32",
+                "_WINDOWS",
+                "UNICODE",
+                "_UNICODE",
+                "NOMINMAX"
+            ],
+            "cStandard": "c17",
+            "cppStandard": "c++20",
+            "intelliSenseMode": "windows-msvc-x64",
+            "compileCommands": "${workspaceFolder}/cpp/build/compile_commands.json"
+        },
+        {
+            "name": "Linux (browse only)",
+            "includePath": [
+                "${workspaceFolder}/cpp/src",
+                "/usr/include/opencv4",
+                "/usr/local/include/opencv4",
+                "/usr/include",
+                "/usr/local/include"
+            ],
+            "defines": [
+                "_WIN32",
+                "WIN32",
+                "NOMINMAX"
+            ],
+            "cStandard": "c17",
+            "cppStandard": "c++20",
+            "intelliSenseMode": "linux-gcc-x64"
+        }
+    ],
+    "version": 4
+}
