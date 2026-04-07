@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
-from pathlib import Path
 import sys
+import threading
+from dataclasses import dataclass, field
+from pathlib import Path
 from typing import ClassVar
 
 import cv2
@@ -32,6 +33,10 @@ class CameraService:
     _last_error_message: str | None = None
     _is_live_source: bool = False
     _last_reported_profile_label: str | None = None
+    _opening: bool = False
+    _open_thread: threading.Thread | None = None
+    _open_generation: int = 0
+    _lock: threading.Lock = field(default_factory=threading.Lock)
 
     def __post_init__(self) -> None:
         self._logger = logging.getLogger(__name__)
@@ -48,25 +53,45 @@ class CameraService:
             self._last_error_message = None
             return True
 
-        capture = cv2.VideoCapture(self.settings.camera_index)
-        if not capture.isOpened():
-            self._last_error_message = (
-                f"Unable to open camera index {self.settings.camera_index}."
-            )
-            self._logger.warning(
-                "Unable to open camera index %s", self.settings.camera_index
-            )
-            self._capture = None
+        if self._opening:
             return False
 
-        capture.set(cv2.CAP_PROP_FRAME_WIDTH, self.settings.frame_width)
-        capture.set(cv2.CAP_PROP_FRAME_HEIGHT, self.settings.frame_height)
-        capture.set(cv2.CAP_PROP_FPS, self.settings.target_fps)
-        self._capture = capture
-        self._last_error_message = None
-        self._last_reported_profile_label = None
-        self._logger.info("Opened camera index %s", self.settings.camera_index)
-        return True
+        self._opening = True
+        self._open_generation += 1
+        generation = self._open_generation
+        self._open_thread = threading.Thread(
+            target=self._open_in_background,
+            args=(generation,),
+            daemon=True,
+        )
+        self._open_thread.start()
+        return False
+
+    def _open_in_background(self, generation: int) -> None:
+        capture = cv2.VideoCapture(self.settings.camera_index)
+        with self._lock:
+            if generation != self._open_generation:
+                capture.release()
+                return
+            if not capture.isOpened():
+                self._last_error_message = (
+                    f"Unable to open camera index {self.settings.camera_index}."
+                )
+                self._logger.warning(
+                    "Unable to open camera index %s", self.settings.camera_index
+                )
+                self._capture = None
+                self._opening = False
+                return
+
+            capture.set(cv2.CAP_PROP_FRAME_WIDTH, self.settings.frame_width)
+            capture.set(cv2.CAP_PROP_FRAME_HEIGHT, self.settings.frame_height)
+            capture.set(cv2.CAP_PROP_FPS, self.settings.target_fps)
+            self._capture = capture
+            self._last_error_message = None
+            self._last_reported_profile_label = None
+            self._opening = False
+            self._logger.info("Opened camera index %s", self.settings.camera_index)
 
     def set_camera_index(self, camera_index: int) -> None:
         if camera_index == self.settings.camera_index:
@@ -199,18 +224,49 @@ class CameraService:
         return indices
 
     def release(self) -> None:
-        if self._capture is not None:
-            self._capture.release()
-            self._logger.info("Released camera index %s", self.settings.camera_index)
-        self._capture = None
-        self._is_live_source = False
+        with self._lock:
+            self._open_generation += 1
+            self._opening = False
+            if self._capture is not None:
+                self._capture.release()
+                self._logger.info(
+                    "Released camera index %s", self.settings.camera_index
+                )
+            self._capture = None
+            self._is_live_source = False
 
     def reconnect(self) -> bool:
         self._logger.info(
             "Reconnect requested for camera index %s", self.settings.camera_index
         )
         self.release()
-        return self.open()
+        return self._open_sync()
+
+    def _open_sync(self) -> bool:
+        """Blocking open — used only for explicit user-initiated reconnect."""
+        if self._capture is not None and self._capture.isOpened():
+            self._last_error_message = None
+            return True
+
+        capture = cv2.VideoCapture(self.settings.camera_index)
+        if not capture.isOpened():
+            self._last_error_message = (
+                f"Unable to open camera index {self.settings.camera_index}."
+            )
+            self._logger.warning(
+                "Unable to open camera index %s", self.settings.camera_index
+            )
+            self._capture = None
+            return False
+
+        capture.set(cv2.CAP_PROP_FRAME_WIDTH, self.settings.frame_width)
+        capture.set(cv2.CAP_PROP_FRAME_HEIGHT, self.settings.frame_height)
+        capture.set(cv2.CAP_PROP_FPS, self.settings.target_fps)
+        self._capture = capture
+        self._last_error_message = None
+        self._last_reported_profile_label = None
+        self._logger.info("Opened camera index %s", self.settings.camera_index)
+        return True
 
     @property
     def latest_frame(self) -> np.ndarray | None:
