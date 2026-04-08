@@ -321,8 +321,6 @@ void GameEngineService::refresh_round_outcome(GameSessionModel& session) {
     if (rs.survivor_ids.size() == 1) {
         session.winner_id = rs.survivor_ids[0];
         session.app_state = AppState::Finished;
-        rs.phase = RoundPhase::Finished;
-        rs.timer_remaining = 0.0f;
         session.status_message = "Winner: " + *session.winner_id;
     } else {
         session.winner_id = std::nullopt;
