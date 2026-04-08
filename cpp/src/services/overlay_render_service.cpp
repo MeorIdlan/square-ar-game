@@ -185,9 +185,9 @@ std::array<DirectX::XMFLOAT2, 4> OverlayRenderService::project_floor_cell(
 d3d::Color4 OverlayRenderService::cell_fill_color(CellState state)
 {
     switch (state) {
-        case CellState::GREEN:    return {46/255.f, 204/255.f, 113/255.f, 110/255.f};
-        case CellState::RED:      return {231/255.f, 76/255.f, 60/255.f, 110/255.f};
-        case CellState::FLASHING: return {constants::FLASHING_CELL_COLOR_R/255.f,
+        case CellState::Green:    return {46/255.f, 204/255.f, 113/255.f, 110/255.f};
+        case CellState::Red:      return {231/255.f, 76/255.f, 60/255.f, 110/255.f};
+        case CellState::Flashing: return {constants::FLASHING_CELL_COLOR_R/255.f,
                                           constants::FLASHING_CELL_COLOR_G/255.f,
                                           constants::FLASHING_CELL_COLOR_B/255.f,
                                           constants::FLASHING_CELL_ALPHA/255.f};

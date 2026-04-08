@@ -90,9 +90,9 @@ void DebugRenderService::render(
 d3d::Color4 DebugRenderService::cell_debug_color(CellState state)
 {
     switch (state) {
-        case CellState::GREEN:    return {0.18f, 0.545f, 0.341f, 1.0f}; // #2e8b57
-        case CellState::RED:      return {0.647f, 0.165f, 0.165f, 1.0f}; // #a52a2a
-        case CellState::FLASHING: return {0.722f, 0.525f, 0.043f, 1.0f}; // #b8860b
+        case CellState::Green:    return {0.18f, 0.545f, 0.341f, 1.0f}; // #2e8b57
+        case CellState::Red:      return {0.647f, 0.165f, 0.165f, 1.0f}; // #a52a2a
+        case CellState::Flashing: return {0.722f, 0.525f, 0.043f, 1.0f}; // #b8860b
         default:                  return {0.251f, 0.251f, 0.251f, 1.0f}; // #404040
     }
 }

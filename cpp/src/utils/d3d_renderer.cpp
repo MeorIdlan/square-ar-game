@@ -147,9 +147,10 @@ void Renderer2D::draw_text(float x, float y, const std::wstring& text, Color4 co
 
     sprite_batch_->Begin(DirectX::SpriteSortMode_Deferred,
                          common_states_->NonPremultiplied());
+    DirectX::XMFLOAT4 color4(color.r, color.g, color.b, color.a);
     font_->DrawString(sprite_batch_.get(), text.c_str(),
                       DirectX::XMFLOAT2(x, y),
-                      DirectX::XMLoadFloat4(&DirectX::XMFLOAT4(color.r, color.g, color.b, color.a)));
+                      DirectX::XMLoadFloat4(&color4));
     sprite_batch_->End();
 
     // Restore primitive batch state
@@ -165,10 +166,10 @@ void Renderer2D::draw_outlined_text(float x, float y, const std::wstring& text,
     sprite_batch_->Begin(DirectX::SpriteSortMode_Deferred,
                          common_states_->NonPremultiplied());
 
-    auto outline = DirectX::XMLoadFloat4(
-        &DirectX::XMFLOAT4(outline_color.r, outline_color.g, outline_color.b, outline_color.a));
-    auto fill = DirectX::XMLoadFloat4(
-        &DirectX::XMFLOAT4(fill_color.r, fill_color.g, fill_color.b, fill_color.a));
+    DirectX::XMFLOAT4 outline4(outline_color.r, outline_color.g, outline_color.b, outline_color.a);
+    DirectX::XMFLOAT4 fill4(fill_color.r, fill_color.g, fill_color.b, fill_color.a);
+    auto outline = DirectX::XMLoadFloat4(&outline4);
+    auto fill = DirectX::XMLoadFloat4(&fill4);
 
     constexpr float offsets[][2] = {
         {-1,-1}, {-1,0}, {-1,1}, {0,-1}, {0,1}, {1,-1}, {1,0}, {1,1}

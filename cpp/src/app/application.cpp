@@ -78,7 +78,7 @@ bool Application::initialize(HINSTANCE hInstance)
     vision_worker_->start();
 
     // Initialize session state
-    session_.app_state = AppState::CAMERA_READY;
+    session_.app_state = AppState::CameraReady;
     session_.status_message = "Ready to calibrate";
     session_.camera_status_message = "Waiting for camera frames";
     session_.pose_status_message = "Pose tracking idle";
@@ -250,7 +250,7 @@ void Application::process_pose_result()
 
     int active_count = 0;
     for (const auto& [_, p] : session_.players) {
-        if (p.tracking_state == PlayerTrackingState::ACTIVE) ++active_count;
+        if (p.tracking_state == PlayerTrackingState::Active) ++active_count;
     }
 
     session_.pose_status_message = std::format(
@@ -265,7 +265,7 @@ void Application::publish_session()
 
 void Application::calibrate()
 {
-    session_.app_state = AppState::CALIBRATING;
+    session_.app_state = AppState::Calibrating;
     session_.status_message = "Attempting ArUco calibration from latest camera frame";
 
     if (!latest_frame_copy_.frame.empty()) {
@@ -278,15 +278,15 @@ void Application::calibrate()
     }
 
     session_.app_state = session_.calibration.is_valid()
-        ? AppState::CALIBRATED
-        : AppState::CAMERA_READY;
+        ? AppState::Calibrated
+        : AppState::CameraReady;
     session_.status_message = session_.calibration.validation_message;
 }
 
 void Application::reset_calibration()
 {
     session_.calibration = CalibrationModel{};
-    session_.app_state = AppState::CAMERA_READY;
+    session_.app_state = AppState::CameraReady;
     session_.status_message = "Calibration reset";
 }
 
