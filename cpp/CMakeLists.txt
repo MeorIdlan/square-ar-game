@@ -9,6 +9,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # MSVC warnings
 if(MSVC)
     add_compile_options(/W4 /permissive-)
+    add_compile_definitions(NOMINMAX WIN32_LEAN_AND_MEAN)
 endif()
 
 # ── Dependencies via vcpkg ─────────────────────────────────────────────

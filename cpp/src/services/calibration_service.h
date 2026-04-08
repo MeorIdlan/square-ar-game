@@ -31,7 +31,7 @@ public:
 
 private:
     std::string dictionary_name_ = "DICT_6X6_1000";
-    static cv::Ptr<cv::aruco::Dictionary> get_dictionary(const std::string& name);
+    static cv::aruco::Dictionary get_dictionary(const std::string& name);
 };
 
 } // namespace sag

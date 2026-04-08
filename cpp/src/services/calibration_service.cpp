@@ -6,7 +6,7 @@
 
 namespace sag {
 
-static const std::unordered_map<std::string, cv::aruco::PREDEFINED_DICTIONARY_NAME> ARUCO_DICT_MAP = {
+static const std::unordered_map<std::string, int> ARUCO_DICT_MAP = {
     {"DICT_4X4_50",   cv::aruco::DICT_4X4_50},
     {"DICT_4X4_100",  cv::aruco::DICT_4X4_100},
     {"DICT_4X4_250",  cv::aruco::DICT_4X4_250},
@@ -25,7 +25,7 @@ static const std::unordered_map<std::string, cv::aruco::PREDEFINED_DICTIONARY_NA
     {"DICT_7X7_1000", cv::aruco::DICT_7X7_1000},
 };
 
-cv::Ptr<cv::aruco::Dictionary> CalibrationService::get_dictionary(const std::string& name) {
+cv::aruco::Dictionary CalibrationService::get_dictionary(const std::string& name) {
     auto it = ARUCO_DICT_MAP.find(name);
     if (it != ARUCO_DICT_MAP.end())
         return cv::aruco::getPredefinedDictionary(it->second);
@@ -58,10 +58,11 @@ CalibrationModel CalibrationService::calibrate(
 
     // Detect ArUco markers
     auto dictionary = get_dictionary(dictionary_name_);
-    auto parameters = cv::aruco::DetectorParameters::create();
+    cv::aruco::DetectorParameters parameters;
     std::vector<std::vector<cv::Point2f>> corners;
     std::vector<int> ids;
-    cv::aruco::detectMarkers(gray, dictionary, corners, ids, parameters);
+    cv::aruco::ArucoDetector detector(dictionary, parameters);
+    detector.detectMarkers(gray, corners, ids);
 
     // Store detected marker corners
     for (size_t i = 0; i < ids.size(); ++i) {
