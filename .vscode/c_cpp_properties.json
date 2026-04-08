@@ -29,8 +29,6 @@
                 "/usr/local/include"
             ],
             "defines": [
-                "_WIN32",
-                "WIN32",
                 "NOMINMAX"
             ],
             "cStandard": "c17",
