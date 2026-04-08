@@ -4,17 +4,22 @@
 		{
 			"label": "CMake: configure",
 			"type": "shell",
+			"options": {
+				"shell": {
+					"executable": "powershell.exe",
+					"args": ["-NoProfile", "-Command"]
+				},
+				"cwd": "${workspaceFolder}/cpp"
+			},
 			"command": "cmake",
 			"args": [
 				"-B", "${workspaceFolder}/cpp/build",
 				"-S", "${workspaceFolder}/cpp",
 				"-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
 				"-DCMAKE_TOOLCHAIN_FILE=${env:VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
-				"-DCMAKE_BUILD_TYPE=Release"
+				"-DCMAKE_BUILD_TYPE=Release",
+				"-DPython3_EXECUTABLE=${env:LOCALAPPDATA}/Programs/Python/Python313/python.exe"
 			],
-			"options": {
-				"cwd": "${workspaceFolder}/cpp"
-			},
 			"problemMatcher": ["$gcc"],
 			"group": "build",
 			"detail": "Configure CMake and generate compile_commands.json"
@@ -22,6 +27,13 @@
 		{
 			"label": "CMake: build",
 			"type": "shell",
+			"options": {
+				"shell": {
+					"executable": "powershell.exe",
+					"args": ["-NoProfile", "-Command"]
+				},
+				"cwd": "${workspaceFolder}/cpp"
+			},
 			"command": "cmake",
 			"args": [
 				"--build", "${workspaceFolder}/cpp/build",
@@ -29,9 +41,6 @@
 				"--parallel"
 			],
 			"dependsOn": "CMake: configure",
-			"options": {
-				"cwd": "${workspaceFolder}/cpp"
-			},
 			"problemMatcher": ["$msCompile"],
 			"group": {
 				"kind": "build",
@@ -42,15 +51,19 @@
 		{
 			"label": "CMake: test",
 			"type": "shell",
+			"options": {
+				"shell": {
+					"executable": "powershell.exe",
+					"args": ["-NoProfile", "-Command"]
+				},
+				"cwd": "${workspaceFolder}/cpp"
+			},
 			"command": "ctest",
 			"args": [
 				"--test-dir", "${workspaceFolder}/cpp/build",
 				"--output-on-failure",
 				"-C", "Release"
 			],
-			"options": {
-				"cwd": "${workspaceFolder}/cpp"
-			},
 			"problemMatcher": [],
 			"group": "test",
 			"detail": "Run C++ tests with CTest"
