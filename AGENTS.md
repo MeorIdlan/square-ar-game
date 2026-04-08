@@ -1,6 +1,7 @@
 # square-ar-game — Agent Guidelines
 
 Physical AR floor elimination game with two implementations:
+
 - **Python** (`python/`): Python 3.13, PyQt6, OpenCV (ArUco), MediaPipe pose tracking
 - **C++** (`cpp/`): C++20, Direct3D 11, Media Foundation, OpenCV, ONNX Runtime, Dear ImGui
 
@@ -123,18 +124,18 @@ cpp/
 
 ## Module Responsibilities
 
-| Module | Responsibility |
-|--------|---------------|
-| `CalibrationService` | ArUco detection, homography + `inverse_homography` computation |
-| `FloorMappingService` | Image coords → floor coords via homography |
-| `PlayerTrackerService` | Associates pose detections to stable player IDs |
-| `GameEngineService` | Round lifecycle state machine; delegates evaluation to `RoundEvaluator` |
-| `RoundEvaluator` | Pure evaluation: survivors vs eliminated from a mapped-players snapshot |
-| `OverlayRenderService` | AR overlay on camera frame using cached `inverse_homography` |
-| `DebugRenderService` | Debug grid canvas — no camera feed required |
-| `CameraCoordinator` | Camera index/profile management, emits `camera_status_changed` |
-| `ConfigCoordinator` | Grid/timing/ArUco settings, emits `config_changed` |
-| `MainViewModel` | Facade: delegates to coordinators; orchestrates pose → floor → player pipeline |
+| Module                 | Responsibility                                                                 |
+| ---------------------- | ------------------------------------------------------------------------------ |
+| `CalibrationService`   | ArUco detection, homography + `inverse_homography` computation                 |
+| `FloorMappingService`  | Image coords → floor coords via homography                                     |
+| `PlayerTrackerService` | Associates pose detections to stable player IDs                                |
+| `GameEngineService`    | Round lifecycle state machine; delegates evaluation to `RoundEvaluator`        |
+| `RoundEvaluator`       | Pure evaluation: survivors vs eliminated from a mapped-players snapshot        |
+| `OverlayRenderService` | AR overlay on camera frame using cached `inverse_homography`                   |
+| `DebugRenderService`   | Debug grid canvas — no camera feed required                                    |
+| `CameraCoordinator`    | Camera index/profile management, emits `camera_status_changed`                 |
+| `ConfigCoordinator`    | Grid/timing/ArUco settings, emits `config_changed`                             |
+| `MainViewModel`        | Facade: delegates to coordinators; orchestrates pose → floor → player pipeline |
 
 ---
 
