@@ -1,4 +1,9 @@
 {
     "cmake.sourceDirectory": "${workspaceFolder}/cpp",
-    "cmake.buildDirectory": "${workspaceFolder}/cpp/build"
+    "cmake.buildDirectory": "${workspaceFolder}/cpp/build",
+    "cmake.configureArgs": [
+        "-DCMAKE_TOOLCHAIN_FILE=${env:VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DPython3_EXECUTABLE=${env:LOCALAPPDATA}/Programs/Python/Python313/python.exe"
+    ]
 }
