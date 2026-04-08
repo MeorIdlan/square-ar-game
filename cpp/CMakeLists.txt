@@ -54,6 +54,7 @@ set(RENDER_SERVICE_SOURCES
 
 set(UTIL_SOURCES
     src/utils/config.cpp
+    src/utils/logger.cpp
 )
 
 set(UI_SOURCES
