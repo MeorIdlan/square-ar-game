@@ -17,6 +17,8 @@
 				"-S", "${workspaceFolder}/cpp",
 				"-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
 				"-DCMAKE_TOOLCHAIN_FILE=${env:VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+				"-DVCPKG_TARGET_TRIPLET=x64-windows",
+				"-DVCPKG_HOST_TRIPLET=x64-windows",
 				"-DCMAKE_BUILD_TYPE=Release",
 				"-DPython3_EXECUTABLE=${env:LOCALAPPDATA}/Programs/Python/Python313/python.exe"
 			],
