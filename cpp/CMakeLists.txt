@@ -13,17 +13,10 @@ if(MSVC)
 endif()
 
 # ── Dependencies via vcpkg ─────────────────────────────────────────────
-find_package(OpenCV REQUIRED COMPONENTS core imgproc aruco calib3d)
+find_package(OpenCV REQUIRED COMPONENTS core imgproc aruco calib3d dnn)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(imgui CONFIG REQUIRED)
 find_package(GTest CONFIG REQUIRED)
-
-# ONNX Runtime — find via CMake config or manual path
-find_package(onnxruntime CONFIG QUIET)
-if(NOT onnxruntime_FOUND)
-    find_library(ONNXRUNTIME_LIB onnxruntime)
-    find_path(ONNXRUNTIME_INCLUDE onnxruntime_cxx_api.h PATH_SUFFIXES onnxruntime)
-endif()
 
 # DirectXTK (Windows only)
 if(WIN32)
@@ -80,14 +73,6 @@ target_link_libraries(square_ar_core PUBLIC
     ${OpenCV_LIBS}
     nlohmann_json::nlohmann_json
 )
-if(onnxruntime_FOUND)
-    target_link_libraries(square_ar_core PUBLIC onnxruntime::onnxruntime)
-elseif(ONNXRUNTIME_LIB)
-    target_link_libraries(square_ar_core PUBLIC ${ONNXRUNTIME_LIB})
-    if(ONNXRUNTIME_INCLUDE)
-        target_include_directories(square_ar_core PUBLIC ${ONNXRUNTIME_INCLUDE})
-    endif()
-endif()
 
 # ── Executable ─────────────────────────────────────────────────────────
 if(WIN32)

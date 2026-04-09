@@ -1,35 +1,35 @@
 #pragma once
-// PoseTrackingService — ONNX Runtime pose detection
+// PoseTrackingService — OpenCV DNN pose detection (YOLOv8-pose ONNX)
 
 #include "services/interfaces.h"
 #include "utils/constants.h"
 
-#include <memory>
+#include <opencv2/dnn.hpp>
+
 #include <string>
 
-// Forward declare to avoid ONNX headers in the public interface
-namespace Ort { class Session; class Env; class SessionOptions; }
+namespace sag
+{
 
-namespace sag {
+    class PoseTrackingService : public IPoseTracker
+    {
+    public:
+        PoseTrackingService() = default;
+        ~PoseTrackingService() override { close(); }
 
-class PoseTrackingService : public IPoseTracker {
-public:
-    PoseTrackingService();
-    ~PoseTrackingService();
+        bool initialize(const std::string &model_path, int num_poses) override;
+        PoseResult process_frame(const FramePacket &packet) override;
+        void close() override;
 
-    bool initialize(const std::string& model_path, int num_poses) override;
-    PoseResult process_frame(const FramePacket& packet) override;
-    void close() override;
+    private:
+        cv::dnn::Net net_;
 
-private:
-    struct Impl;
-    std::unique_ptr<Impl> impl_;
-
-    float min_landmark_visibility_ = 0.2f;
-    int num_poses_ = 4;
-    bool initialized_ = false;
-
-    PoseFootState extract_foot_state(const float* landmarks, int num_landmarks) const;
-};
+        float conf_threshold_ = 0.35f;
+        float nms_threshold_ = 0.45f;
+        float min_landmark_visibility_ = 0.2f;
+        int num_poses_ = 4;
+        int input_size_ = 640; // YOLOv8-pose expects 640x640
+        bool initialized_ = false;
+    };
 
 } // namespace sag

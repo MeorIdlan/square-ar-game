@@ -71,10 +71,20 @@ namespace sag
         // Initialize pose tracking
         if (!config_.pose.model_asset_path.empty())
         {
-            Logger::info(std::format("Loading pose model: {}", config_.pose.model_asset_path));
             std::filesystem::path model_path(config_.pose.model_asset_path);
-            pose_service_->initialize(model_path.string(), config_.pose.num_poses);
-            Logger::info(std::format("Pose tracking initialized (max {} poses)", config_.pose.num_poses));
+            if (!std::filesystem::exists(model_path))
+            {
+                Logger::warn(std::format(
+                    "Pose model not found at '{}' — pose tracking disabled. "
+                    "Provide an ONNX export of the pose landmarker model at that path.",
+                    model_path.string()));
+            }
+            else
+            {
+                Logger::info(std::format("Loading pose model: {}", config_.pose.model_asset_path));
+                pose_service_->initialize(model_path.string(), config_.pose.num_poses);
+                Logger::info(std::format("Pose tracking initialized (max {} poses)", config_.pose.num_poses));
+            }
         }
         else
         {
@@ -441,7 +451,10 @@ namespace sag
         {
             config_.pose.model_asset_path = path;
             pose_service_->close();
-            pose_service_->initialize(path, config_.pose.num_poses);
+            if (std::filesystem::exists(path))
+                pose_service_->initialize(path, config_.pose.num_poses);
+            else
+                Logger::warn(std::format("set_pose_model: file not found '{}'", path));
         };
 
         cb.set_grid_rows = [this](int rows)

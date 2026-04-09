@@ -156,6 +156,11 @@ namespace sag
 
         if (FAILED(hr) || !sample)
         {
+            // MF_SOURCE_READERF_ENDOFSTREAM (0x100) can fire transiently at stream
+            // startup before frames begin flowing — not a real error, just skip.
+            if (SUCCEEDED(hr) && (flags & MF_SOURCE_READERF_ENDOFSTREAM))
+                return packet;
+
             packet.error_message = std::format("Failed to read sample hr=0x{:08X} flags=0x{:08X}",
                                                static_cast<unsigned>(hr), flags);
             Logger::warn(std::format("ReadSample failed: {}", packet.error_message));

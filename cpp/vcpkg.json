@@ -14,7 +14,6 @@
       "features": ["dx11-binding", "win32-binding"]
     },
     "gtest",
-    "onnxruntime",
     "directxtk"
   ],
   "builtin-baseline": "81e3c888ef717a026eb57bb2f3cb0dbd30246271"

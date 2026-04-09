@@ -4,102 +4,39 @@
 
 #include <opencv2/imgproc.hpp>
 
-// ONNX Runtime headers
-#include <onnxruntime_cxx_api.h>
-
 #include <algorithm>
 #include <chrono>
-#include <numeric>
 #include <vector>
 
 namespace sag
 {
 
-    struct PoseTrackingService::Impl
-    {
-        Ort::Env env{ORT_LOGGING_LEVEL_WARNING, "PoseTracker"};
-        std::unique_ptr<Ort::Session> session;
-        Ort::SessionOptions session_options;
-
-        // Model I/O metadata (populated on init)
-        std::vector<const char *> input_names;
-        std::vector<const char *> output_names;
-        std::vector<int64_t> input_shape; // e.g. {1, 256, 256, 3}
-    };
-
-    PoseTrackingService::PoseTrackingService()
-        : impl_(std::make_unique<Impl>()) {}
-
-    PoseTrackingService::~PoseTrackingService() { close(); }
+    // YOLOv8-pose raw output shape: [1, 56, 8400]
+    // Each column is one anchor: [x_c, y_c, w, h, obj_conf, kp0_x, kp0_y, kp0_v, ..., kp16_x, kp16_y, kp16_v]
+    static constexpr int YOLO_KP_COUNT = 17;                                                 // COCO keypoints
+    static constexpr int YOLO_KP_VALUES = 3;                                                 // x, y, visibility
+    static constexpr int YOLO_BOX_FIELDS = 5;                                                // x_c, y_c, w, h, obj_conf
+    static constexpr int YOLO_ROW_STRIDE = YOLO_BOX_FIELDS + YOLO_KP_COUNT * YOLO_KP_VALUES; // 56
 
     bool PoseTrackingService::initialize(const std::string &model_path, int num_poses)
     {
+        close();
         num_poses_ = num_poses;
 
-        try
+        net_ = cv::dnn::readNetFromONNX(model_path);
+        if (net_.empty())
         {
-            impl_->session_options.SetIntraOpNumThreads(2);
-            impl_->session_options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
-
-            // Try GPU (DirectML) first, fall back to CPU
-#ifdef USE_DIRECTML
-            try
-            {
-                Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_DML(impl_->session_options, 0));
-            }
-            catch (...)
-            {
-                // GPU not available, CPU fallback
-            }
-#endif
-
-#ifdef _WIN32
-            std::wstring wpath(model_path.begin(), model_path.end());
-            impl_->session = std::make_unique<Ort::Session>(
-                impl_->env, wpath.c_str(), impl_->session_options);
-#else
-            impl_->session = std::make_unique<Ort::Session>(
-                impl_->env, model_path.c_str(), impl_->session_options);
-#endif
-
-            // Query input/output names and shapes
-            auto allocator = Ort::AllocatorWithDefaultOptions();
-
-            size_t num_inputs = impl_->session->GetInputCount();
-            for (size_t i = 0; i < num_inputs; ++i)
-            {
-                auto name = impl_->session->GetInputNameAllocated(i, allocator);
-                impl_->input_names.push_back(strdup(name.get()));
-            }
-            Logger::info(std::format("ONNX model loaded: {} input(s), {} output(s)",
-                                     num_inputs, impl_->session->GetOutputCount()));
-
-            size_t num_outputs = impl_->session->GetOutputCount();
-            for (size_t i = 0; i < num_outputs; ++i)
-            {
-                auto name = impl_->session->GetOutputNameAllocated(i, allocator);
-                impl_->output_names.push_back(strdup(name.get()));
-            }
-
-            // Get input shape
-            auto type_info = impl_->session->GetInputTypeInfo(0);
-            auto tensor_info = type_info.GetTensorTypeAndShapeInfo();
-            impl_->input_shape = tensor_info.GetShape();
-            std::string shape_str;
-            for (auto d : impl_->input_shape)
-                shape_str += std::to_string(d) + " ";
-            Logger::info(std::format("ONNX input shape: [{}]", shape_str));
-
-            initialized_ = true;
-            Logger::info(std::format("PoseTrackingService initialized from: {}", model_path));
-            return true;
-        }
-        catch (const Ort::Exception &e)
-        {
-            Logger::error(std::format("ONNX init failed: {}", e.what()));
-            initialized_ = false;
+            Logger::error(std::format("PoseTrackingService: failed to load model from {}", model_path));
             return false;
         }
+
+        // Use OpenCL (GPU) if available and requested
+        net_.setPreferableBackend(cv::dnn::DNN_BACKEND_DEFAULT);
+        net_.setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
+
+        initialized_ = true;
+        Logger::info(std::format("PoseTrackingService initialized from: {}", model_path));
+        return true;
     }
 
     PoseResult PoseTrackingService::process_frame(const FramePacket &packet)
@@ -110,142 +47,136 @@ namespace sag
         auto now = std::chrono::steady_clock::now();
         result.timestamp = std::chrono::duration<double>(now.time_since_epoch()).count();
 
-        if (!initialized_ || !impl_->session || packet.frame.empty())
+        if (!initialized_ || packet.frame.empty())
         {
             result.status_text = "Pose tracker not initialized or empty frame";
             return result;
         }
 
-        // Determine model input size (typically 256x256 or 224x224)
-        int input_h = (impl_->input_shape.size() >= 3) ? static_cast<int>(impl_->input_shape[1]) : 256;
-        int input_w = (impl_->input_shape.size() >= 4) ? static_cast<int>(impl_->input_shape[2]) : 256;
+        const int frame_w = packet.frame.cols;
+        const int frame_h = packet.frame.rows;
 
-        // Preprocess: resize to model input size, convert BGR→RGB, normalize to [0,1]
-        cv::Mat rgb;
-        cv::cvtColor(packet.frame, rgb, cv::COLOR_BGR2RGB);
+        // Letterbox-resize to 640x640, keep aspect ratio
+        float scale = std::min(
+            static_cast<float>(input_size_) / static_cast<float>(frame_w),
+            static_cast<float>(input_size_) / static_cast<float>(frame_h));
+        int scaled_w = static_cast<int>(std::round(frame_w * scale));
+        int scaled_h = static_cast<int>(std::round(frame_h * scale));
+        int pad_left = (input_size_ - scaled_w) / 2;
+        int pad_top = (input_size_ - scaled_h) / 2;
 
         cv::Mat resized;
-        cv::resize(rgb, resized, cv::Size(input_w, input_h));
+        cv::resize(packet.frame, resized, cv::Size(scaled_w, scaled_h));
+        cv::Mat padded(input_size_, input_size_, CV_8UC3, cv::Scalar(114, 114, 114));
+        resized.copyTo(padded(cv::Rect(pad_left, pad_top, scaled_w, scaled_h)));
 
-        cv::Mat float_mat;
-        resized.convertTo(float_mat, CV_32F, 1.0f / 255.0f);
+        // BGR → RGB blob, normalise to [0,1], NCHW
+        cv::Mat blob = cv::dnn::blobFromImage(
+            padded, 1.0 / 255.0, cv::Size(input_size_, input_size_),
+            cv::Scalar(0, 0, 0), /*swapRB=*/true, /*crop=*/false);
 
-        // Create ONNX tensor
-        auto memory_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
-        std::vector<int64_t> input_shape = {1, input_h, input_w, 3};
-        size_t input_size = static_cast<size_t>(input_h * input_w * 3);
+        net_.setInput(blob);
 
-        Ort::Value input_tensor = Ort::Value::CreateTensor<float>(
-            memory_info, float_mat.ptr<float>(), input_size,
-            input_shape.data(), input_shape.size());
+        // Forward pass — output: [1, 56, 8400]
+        cv::Mat raw = net_.forward();
 
-        // Run inference
-        try
+        // raw is [1, 56, 8400] → reshape to [56, 8400] then transpose to [8400, 56]
+        cv::Mat output = raw.reshape(1, YOLO_ROW_STRIDE); // [56 x 8400]
+        cv::Mat detections;
+        cv::transpose(output, detections); // [8400 x 56]
+
+        // Collect boxes that pass confidence threshold
+        std::vector<cv::Rect2f> boxes;
+        std::vector<float> scores;
+        std::vector<int> indices_keep;
+
+        const int rows = detections.rows;
+        for (int i = 0; i < rows; ++i)
         {
-            auto output_tensors = impl_->session->Run(
-                Ort::RunOptions{nullptr},
-                impl_->input_names.data(), &input_tensor, 1,
-                impl_->output_names.data(), impl_->output_names.size());
+            const float *row = detections.ptr<float>(i);
+            float conf = row[4];
+            if (conf < conf_threshold_)
+                continue;
 
-            // Parse output: expected shape [1, num_poses, 33, 5] (x, y, z, visibility, presence)
-            // or [1, 33, 5] for single-pose model
-            auto &landmarks_tensor = output_tensors[0];
-            auto shape = landmarks_tensor.GetTensorTypeAndShapeInfo().GetShape();
-            const float *data = landmarks_tensor.GetTensorMutableData<float>();
-
-            int num_detected = 1;
-            int landmarks_per_pose = 33;
-            int values_per_landmark = 5;
-
-            if (shape.size() == 4)
-            {
-                num_detected = static_cast<int>(shape[1]);
-                landmarks_per_pose = static_cast<int>(shape[2]);
-                values_per_landmark = static_cast<int>(shape[3]);
-            }
-            else if (shape.size() == 3)
-            {
-                landmarks_per_pose = static_cast<int>(shape[1]);
-                values_per_landmark = static_cast<int>(shape[2]);
-            }
-
-            result.raw_pose_count = num_detected;
-
-            float scale_x = static_cast<float>(packet.frame.cols);
-            float scale_y = static_cast<float>(packet.frame.rows);
-
-            for (int p = 0; p < std::min(num_detected, num_poses_); ++p)
-            {
-                const float *pose_data = data + p * landmarks_per_pose * values_per_landmark;
-
-                // Extract foot landmarks and scale to original image coords
-                PoseFootState foot;
-                auto extract_foot = [&](const std::array<int, 3> &indices) -> std::optional<Point>
-                {
-                    float sum_x = 0, sum_y = 0, sum_vis = 0;
-                    int count = 0;
-                    for (int idx : indices)
-                    {
-                        if (idx >= landmarks_per_pose)
-                            continue;
-                        const float *lm = pose_data + idx * values_per_landmark;
-                        float x = lm[0], y = lm[1];
-                        float vis = (values_per_landmark >= 4) ? lm[3] : 1.0f;
-                        if (vis >= min_landmark_visibility_)
-                        {
-                            sum_x += x * scale_x;
-                            sum_y += y * scale_y;
-                            sum_vis += vis;
-                            ++count;
-                        }
-                    }
-                    if (count == 0)
-                        return std::nullopt;
-                    return Point{sum_x / static_cast<float>(count),
-                                 sum_y / static_cast<float>(count)};
-                };
-
-                foot.left_foot = extract_foot(constants::FOOT_LANDMARK_LEFT);
-                foot.right_foot = extract_foot(constants::FOOT_LANDMARK_RIGHT);
-                foot.resolved_point = resolve_feet_midpoint(foot.left_foot, foot.right_foot);
-
-                // Confidence: average visibility of all detected foot landmarks
-                float total_vis = 0;
-                int vis_count = 0;
-                for (int idx : {27, 28, 29, 30, 31, 32})
-                {
-                    if (idx >= landmarks_per_pose)
-                        continue;
-                    const float *lm = pose_data + idx * values_per_landmark;
-                    float vis = (values_per_landmark >= 4) ? lm[3] : 1.0f;
-                    total_vis += vis;
-                    ++vis_count;
-                }
-                foot.confidence = (vis_count > 0) ? total_vis / static_cast<float>(vis_count) : 0.0f;
-
-                if (foot.resolved_point)
-                    result.detections.push_back(std::move(foot));
-            }
-
-            result.status_text = "Detected " + std::to_string(result.detections.size()) + " pose(s)";
-        }
-        catch (const Ort::Exception &e)
-        {
-            result.status_text = std::string("Inference error: ") + e.what();
+            // Box in padded-image coords — convert to xyxy
+            float cx = row[0], cy = row[1], bw = row[2], bh = row[3];
+            float x1 = cx - bw * 0.5f;
+            float y1 = cy - bh * 0.5f;
+            boxes.emplace_back(x1, y1, bw, bh);
+            scores.push_back(conf);
+            indices_keep.push_back(i);
         }
 
+        // NMS
+        std::vector<int> nms_result;
+        cv::dnn::NMSBoxes(boxes, scores, conf_threshold_, nms_threshold_, nms_result);
+
+        // Sort by confidence descending, keep up to num_poses_
+        std::sort(nms_result.begin(), nms_result.end(),
+                  [&](int a, int b)
+                  { return scores[a] > scores[b]; });
+        if (static_cast<int>(nms_result.size()) > num_poses_)
+            nms_result.resize(static_cast<size_t>(num_poses_));
+
+        result.raw_pose_count = static_cast<int>(nms_result.size());
+
+        // Inverse-letterbox scale factor: go from padded coords → original frame coords
+        auto unpad = [&](float px, float py) -> Point
+        {
+            float x = (px - static_cast<float>(pad_left)) / scale;
+            float y = (py - static_cast<float>(pad_top)) / scale;
+            x = std::clamp(x, 0.0f, static_cast<float>(frame_w - 1));
+            y = std::clamp(y, 0.0f, static_cast<float>(frame_h - 1));
+            return {x, y};
+        };
+
+        for (int ni : nms_result)
+        {
+            const float *row = detections.ptr<float>(indices_keep[ni]);
+
+            // Extract keypoints — layout: [5 + kp_idx*3 + {0=x, 1=y, 2=vis}]
+            auto extract_kp = [&](int kp_idx) -> std::optional<Point>
+            {
+                int base = YOLO_BOX_FIELDS + kp_idx * YOLO_KP_VALUES;
+                float vis = row[base + 2];
+                if (vis < min_landmark_visibility_)
+                    return std::nullopt;
+                return unpad(row[base], row[base + 1]);
+            };
+
+            PoseFootState foot;
+
+            // COCO 15 = left ankle, 16 = right ankle (from constants.h)
+            for (int idx : constants::FOOT_LANDMARK_LEFT)
+                foot.left_foot = extract_kp(idx);
+            for (int idx : constants::FOOT_LANDMARK_RIGHT)
+                foot.right_foot = extract_kp(idx);
+
+            foot.resolved_point = resolve_feet_midpoint(foot.left_foot, foot.right_foot);
+
+            // Confidence: mean visibility of the two ankle keypoints
+            float total_vis = 0.0f;
+            int vis_count = 0;
+            for (int kp_idx : {15, 16})
+            {
+                int base = YOLO_BOX_FIELDS + kp_idx * YOLO_KP_VALUES;
+                float vis = row[base + 2];
+                total_vis += vis;
+                ++vis_count;
+            }
+            foot.confidence = vis_count > 0 ? total_vis / static_cast<float>(vis_count) : 0.0f;
+
+            if (foot.resolved_point)
+                result.detections.push_back(std::move(foot));
+        }
+
+        result.status_text = "Detected " + std::to_string(result.detections.size()) + " pose(s)";
         return result;
     }
 
     void PoseTrackingService::close()
     {
-        impl_->session.reset();
-        for (auto name : impl_->input_names)
-            free(const_cast<char *>(name));
-        for (auto name : impl_->output_names)
-            free(const_cast<char *>(name));
-        impl_->input_names.clear();
-        impl_->output_names.clear();
+        net_ = cv::dnn::Net{};
         initialized_ = false;
     }
 
