@@ -51,15 +51,22 @@ namespace sag
         debug_render_ = std::make_unique<DebugRenderService>();
 
         // Initialize camera
-        camera_service_->open(config_.camera.camera_index,
-                              config_.camera.frame_width,
-                              config_.camera.frame_height,
-                              config_.camera.target_fps);
-        Logger::info(std::format("Camera {} opened ({}x{} @ {} fps)",
-                                 config_.camera.camera_index,
-                                 config_.camera.frame_width,
-                                 config_.camera.frame_height,
-                                 config_.camera.target_fps));
+        bool camera_ok = camera_service_->open(config_.camera.camera_index,
+                                               config_.camera.frame_width,
+                                               config_.camera.frame_height,
+                                               config_.camera.target_fps);
+        if (camera_ok)
+            Logger::info(std::format("Camera {} opened successfully ({}x{} @ {} fps)",
+                                     config_.camera.camera_index,
+                                     config_.camera.frame_width,
+                                     config_.camera.frame_height,
+                                     config_.camera.target_fps));
+        else
+            Logger::error(std::format("Camera {} failed to open ({}x{} @ {} fps) — running in fallback mode",
+                                      config_.camera.camera_index,
+                                      config_.camera.frame_width,
+                                      config_.camera.frame_height,
+                                      config_.camera.target_fps));
 
         // Initialize pose tracking
         if (!config_.pose.model_asset_path.empty())
