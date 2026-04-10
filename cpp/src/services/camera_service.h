@@ -2,6 +2,7 @@
 // CameraService — Media Foundation camera capture (Windows only)
 
 #include "services/interfaces.h"
+#include "utils/config.h"
 
 #ifdef _WIN32
 #include <mfapi.h>
@@ -25,6 +26,10 @@ namespace sag
         int index = 0;
     };
 
+    // Deduplicate and sort camera profiles (highest resolution + fps first).
+    // Removes entries with zero width, height, or fps.
+    std::vector<CameraProfile> normalize_camera_formats(std::vector<CameraProfile> formats);
+
     class CameraService : public ICameraService
     {
     public:
@@ -37,6 +42,9 @@ namespace sag
         bool is_open() const override;
 
         std::vector<CameraDeviceInfo> enumerate_devices();
+
+        // Formats enumerated during the last successful open(); empty if camera is not open.
+        const std::vector<CameraProfile> &cached_formats() const { return cached_formats_; }
 
     private:
 #ifdef _WIN32
@@ -51,6 +59,7 @@ namespace sag
         int height_ = 720;
         bool use_nv12_ = false;
         std::string source_name_ = "fallback";
+        std::vector<CameraProfile> cached_formats_;
 
         cv::Mat convert_sample_to_bgr(
 #ifdef _WIN32

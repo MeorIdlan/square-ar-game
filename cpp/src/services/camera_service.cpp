@@ -1,12 +1,44 @@
 #include "services/camera_service.h"
 
+#include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <format>
 #include <opencv2/imgproc.hpp>
 #include "utils/logger.h"
 
 namespace sag
 {
+
+    // ── normalize_camera_formats (cross-platform) ─────────────────────────────
+
+    std::vector<CameraProfile> normalize_camera_formats(std::vector<CameraProfile> formats)
+    {
+        // Remove entries with zero or negative dimensions / fps
+        formats.erase(
+            std::remove_if(formats.begin(), formats.end(),
+                           [](const CameraProfile &p)
+                           {
+                               return p.width <= 0 || p.height <= 0 || p.fps <= 0;
+                           }),
+            formats.end());
+
+        // Sort: highest pixel count first, then highest fps
+        std::sort(formats.begin(), formats.end(),
+                  [](const CameraProfile &a, const CameraProfile &b)
+                  {
+                      long long pa = static_cast<long long>(a.width) * a.height;
+                      long long pb = static_cast<long long>(b.width) * b.height;
+                      if (pa != pb)
+                          return pa > pb;
+                      return a.fps > b.fps;
+                  });
+
+        // Remove exact duplicates (relies on operator== from config.h)
+        formats.erase(std::unique(formats.begin(), formats.end()), formats.end());
+
+        return formats;
+    }
 
     CameraService::CameraService() = default;
     CameraService::~CameraService() { release(); }
@@ -92,6 +124,35 @@ namespace sag
             Logger::error(std::format("MFCreateSourceReaderFromMediaSource failed hr=0x{:08X}", static_cast<unsigned>(hr)));
             return false;
         }
+
+        // Enumerate and cache all native formats exposed by this device
+        cached_formats_.clear();
+        for (DWORD t = 0;; ++t)
+        {
+            Microsoft::WRL::ComPtr<IMFMediaType> native_type;
+            HRESULT fmt_hr = reader_->GetNativeMediaType(
+                static_cast<DWORD>(MF_SOURCE_READER_FIRST_VIDEO_STREAM),
+                t, native_type.GetAddressOf());
+            if (fmt_hr == MF_E_NO_MORE_TYPES || FAILED(fmt_hr))
+                break;
+
+            UINT32 fw = 0, fh = 0;
+            if (FAILED(MFGetAttributeSize(native_type.Get(), MF_MT_FRAME_SIZE, &fw, &fh)))
+                continue;
+
+            UINT32 fps_num = 0, fps_den = 1;
+            MFGetAttributeRatio(native_type.Get(), MF_MT_FRAME_RATE, &fps_num, &fps_den);
+            if (fps_den == 0)
+                fps_den = 1;
+            int fps_val = static_cast<int>(
+                std::round(static_cast<double>(fps_num) / static_cast<double>(fps_den)));
+
+            if (fw > 0 && fh > 0 && fps_val > 0)
+                cached_formats_.push_back({static_cast<int>(fw), static_cast<int>(fh), fps_val});
+        }
+        cached_formats_ = normalize_camera_formats(std::move(cached_formats_));
+        Logger::info(std::format("Enumerated {} native formats for camera {}",
+                                 cached_formats_.size(), camera_index));
 
         // Configure output format: request NV12 or RGB32 at target resolution
         Microsoft::WRL::ComPtr<IMFMediaType> mediaType;
@@ -251,6 +312,7 @@ namespace sag
     void CameraService::release()
     {
         is_open_ = false;
+        cached_formats_.clear();
         reader_.Reset();
         if (source_)
         {
@@ -343,7 +405,11 @@ namespace sag
     }
 
     cv::Mat CameraService::convert_sample_to_bgr(void *) { return {}; }
-    void CameraService::release() { is_open_ = false; }
+    void CameraService::release()
+    {
+        is_open_ = false;
+        cached_formats_.clear();
+    }
     bool CameraService::is_open() const { return false; }
     std::vector<CameraDeviceInfo> CameraService::enumerate_devices() { return {}; }
 

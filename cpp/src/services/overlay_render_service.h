@@ -13,45 +13,51 @@
 #include <optional>
 #include <string>
 
-namespace sag {
+namespace sag
+{
 
-class OverlayRenderService {
-public:
-    void render(d3d::D3DContext& ctx,
-                d3d::Renderer2D& renderer,
-                const RenderState& state,
-                const FramePacket* frame_packet,
-                const CalibrationModel* calibration);
+    class OverlayRenderService
+    {
+    public:
+        void render(d3d::D3DContext &ctx,
+                    d3d::Renderer2D &renderer,
+                    const RenderState &state,
+                    const FramePacket *frame_packet,
+                    const CalibrationModel *calibration);
 
-private:
-    void draw_camera_background(d3d::D3DContext& ctx,
-                                d3d::Renderer2D& renderer,
-                                const FramePacket* frame_packet,
-                                float width, float height);
+    private:
+        void draw_camera_background(d3d::D3DContext &ctx,
+                                    d3d::Renderer2D &renderer,
+                                    const FramePacket *frame_packet,
+                                    float width, float height);
 
-    void draw_grid_overlay(d3d::Renderer2D& renderer,
-                           const RenderState& state,
-                           const CalibrationModel* calibration);
+        void draw_grid_overlay(d3d::Renderer2D &renderer,
+                               const RenderState &state,
+                               const CalibrationModel *calibration,
+                               float scale_x, float scale_y);
 
-    void draw_player_markers(d3d::Renderer2D& renderer,
-                             const RenderState& state,
-                             const CalibrationModel* calibration);
+        void draw_player_markers(d3d::Renderer2D &renderer,
+                                 const RenderState &state,
+                                 const CalibrationModel *calibration,
+                                 float scale_x, float scale_y);
 
-    void draw_floor_point(d3d::Renderer2D& renderer,
-                          const cv::Mat& inverse_homography,
-                          const std::optional<Point>& point,
-                          d3d::Color4 color, float radius);
+        void draw_floor_point(d3d::Renderer2D &renderer,
+                              const cv::Mat &inverse_homography,
+                              const std::optional<Point> &point,
+                              d3d::Color4 color, float radius,
+                              float scale_x, float scale_y);
 
-    void draw_hud(d3d::Renderer2D& renderer,
-                  const RenderState& state,
-                  float width, float height);
+        void draw_hud(d3d::Renderer2D &renderer,
+                      const RenderState &state,
+                      float width, float height);
 
-    std::array<DirectX::XMFLOAT2, 4> project_floor_cell(
-        const cv::Mat& inverse_homography,
-        float x, float y, float w, float h) const;
+        std::array<DirectX::XMFLOAT2, 4> project_floor_cell(
+            const cv::Mat &inverse_homography,
+            float x, float y, float w, float h,
+            float scale_x, float scale_y) const;
 
-    static d3d::Color4 cell_fill_color(CellState state);
-};
+        static d3d::Color4 cell_fill_color(CellState state);
+    };
 
 } // namespace sag
 

@@ -99,6 +99,20 @@ namespace sag
         if (!operator_window_->create(hInstance, config_, make_operator_callbacks()))
             return false;
 
+        // Populate camera device list in operator UI
+        {
+            auto devices = camera_service_->enumerate_devices();
+            std::vector<std::string> names;
+            names.reserve(devices.size());
+            for (const auto &d : devices)
+                names.push_back(d.name.empty() ? "Camera " + std::to_string(d.index) : d.name);
+            operator_window_->set_camera_devices(std::move(names));
+        }
+
+        // Populate format list for the currently open camera
+        operator_window_->set_camera_formats(
+            std::vector<CameraProfile>(camera_service_->cached_formats()));
+
         // Create projector window
         projector_window_ = std::make_unique<ui::ProjectorWindow>();
         if (!projector_window_->create_on_monitor(config_.display.projector_screen_index, hInstance))
@@ -423,6 +437,8 @@ namespace sag
                                   config_.camera.frame_width,
                                   config_.camera.frame_height,
                                   config_.camera.target_fps);
+            operator_window_->set_camera_formats(
+                std::vector<CameraProfile>(camera_service_->cached_formats()));
             session_.camera_status_message = "Camera reconnected";
         };
 
@@ -433,7 +449,20 @@ namespace sag
             camera_service_->open(idx, config_.camera.frame_width,
                                   config_.camera.frame_height,
                                   config_.camera.target_fps);
+            operator_window_->set_camera_formats(
+                std::vector<CameraProfile>(camera_service_->cached_formats()));
             session_.camera_status_message = std::format("Camera switched to {}", idx);
+        };
+
+        cb.set_camera_format = [this](const CameraProfile &profile)
+        {
+            config_.camera.apply_profile(profile);
+            camera_service_->release();
+            camera_service_->open(config_.camera.camera_index,
+                                  profile.width, profile.height, profile.fps);
+            Logger::info(std::format("Camera format changed to {}x{} @ {} fps",
+                                     profile.width, profile.height, profile.fps));
+            session_.camera_status_message = std::format("Camera format: {}", profile.label());
         };
 
         cb.set_projector_monitor = [this](int idx)
