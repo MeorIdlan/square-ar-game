@@ -117,6 +117,12 @@ namespace sag
                 static_cast<DWORD>(MF_SOURCE_READER_FIRST_VIDEO_STREAM),
                 nullptr, mediaType.Get());
             Logger::info(std::format("SetCurrentMediaType NV12 hr=0x{:08X}", static_cast<unsigned>(hr)));
+            if (SUCCEEDED(hr))
+                use_nv12_ = true;
+        }
+        else
+        {
+            use_nv12_ = false;
         }
 
         if (FAILED(hr))
@@ -124,6 +130,8 @@ namespace sag
             Logger::error(std::format("SetCurrentMediaType failed for all formats hr=0x{:08X}", static_cast<unsigned>(hr)));
             return false;
         }
+
+        Logger::info(std::format("Pixel format: {}", use_nv12_ ? "NV12" : "RGB32/BGRA"));
 
         is_open_ = true;
         frame_counter_ = 0;
@@ -156,9 +164,10 @@ namespace sag
 
         if (FAILED(hr) || !sample)
         {
-            // MF_SOURCE_READERF_ENDOFSTREAM (0x100) can fire transiently at stream
-            // startup before frames begin flowing — not a real error, just skip.
-            if (SUCCEEDED(hr) && (flags & MF_SOURCE_READERF_ENDOFSTREAM))
+            // MF_SOURCE_READERF_STREAMTICK (0x100): a gap in the media stream —
+            // no sample was produced this tick but the stream is still live.
+            // Silently skip; the next ReadSample call will return a real frame.
+            if (SUCCEEDED(hr) && (flags & MF_SOURCE_READERF_STREAMTICK))
                 return packet;
 
             packet.error_message = std::format("Failed to read sample hr=0x{:08X} flags=0x{:08X}",
@@ -191,18 +200,49 @@ namespace sag
         Microsoft::WRL::ComPtr<IMFMediaBuffer> buffer;
         HRESULT hr = sample->ConvertToContiguousBuffer(buffer.GetAddressOf());
         if (FAILED(hr))
+        {
+            Logger::warn(std::format("ConvertToContiguousBuffer failed hr=0x{:08X}", static_cast<unsigned>(hr)));
             return {};
+        }
 
         BYTE *data = nullptr;
         DWORD maxLen = 0, curLen = 0;
         hr = buffer->Lock(&data, &maxLen, &curLen);
         if (FAILED(hr))
+        {
+            Logger::warn(std::format("IMFMediaBuffer::Lock failed hr=0x{:08X}", static_cast<unsigned>(hr)));
             return {};
+        }
 
-        // Assume RGB32 (BGRA) format from MF
-        cv::Mat bgra(height_, width_, CV_8UC4, data);
         cv::Mat bgr;
-        cv::cvtColor(bgra, bgr, cv::COLOR_BGRA2BGR);
+
+        if (use_nv12_)
+        {
+            // NV12: Y plane (width*height bytes) + interleaved UV plane (width*height/2 bytes)
+            // Expected buffer size = width * height * 3 / 2
+            DWORD expected = static_cast<DWORD>(width_ * height_ * 3 / 2);
+            if (curLen < expected)
+            {
+                Logger::warn(std::format("NV12 buffer too small: got {} expected {}", curLen, expected));
+                buffer->Unlock();
+                return {};
+            }
+            cv::Mat yuv(height_ * 3 / 2, width_, CV_8UC1, data);
+            cv::cvtColor(yuv, bgr, cv::COLOR_YUV2BGR_NV12);
+        }
+        else
+        {
+            // RGB32 / BGRA: 4 bytes per pixel
+            DWORD expected = static_cast<DWORD>(width_ * height_ * 4);
+            if (curLen < expected)
+            {
+                Logger::warn(std::format("BGRA buffer too small: got {} expected {}", curLen, expected));
+                buffer->Unlock();
+                return {};
+            }
+            cv::Mat bgra(height_, width_, CV_8UC4, data);
+            cv::cvtColor(bgra, bgr, cv::COLOR_BGRA2BGR);
+        }
 
         buffer->Unlock();
         return bgr.clone();
