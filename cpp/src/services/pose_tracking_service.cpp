@@ -86,7 +86,7 @@ namespace sag
         cv::transpose(output, detections); // [8400 x 56]
 
         // Collect boxes that pass confidence threshold
-        std::vector<cv::Rect2f> boxes;
+        std::vector<cv::Rect2d> boxes;
         std::vector<float> scores;
         std::vector<int> indices_keep;
 
@@ -102,7 +102,8 @@ namespace sag
             float cx = row[0], cy = row[1], bw = row[2], bh = row[3];
             float x1 = cx - bw * 0.5f;
             float y1 = cy - bh * 0.5f;
-            boxes.emplace_back(x1, y1, bw, bh);
+            boxes.emplace_back(static_cast<double>(x1), static_cast<double>(y1),
+                               static_cast<double>(bw), static_cast<double>(bh));
             scores.push_back(conf);
             indices_keep.push_back(i);
         }
