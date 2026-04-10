@@ -64,7 +64,7 @@ namespace sag
 
     struct PoseSettings
     {
-        std::string model_asset_path = "assets/models/yolov8n-pose.onnx";
+        std::string model_asset_path = "assets/models/yolo26n-pose.onnx";
         int num_poses = 4;
         float min_pose_detection_confidence = 0.35f;
         float min_pose_presence_confidence = 0.35f;
