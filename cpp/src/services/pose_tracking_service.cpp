@@ -30,12 +30,98 @@ namespace sag
             return false;
         }
 
-        // Use OpenCL (GPU) if available and requested
-        net_.setPreferableBackend(cv::dnn::DNN_BACKEND_DEFAULT);
-        net_.setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
+        // ── GPU backend selection ──────────────────────────────────────────
+        // Query every (backend, target) pair compiled into this OpenCV build.
+        struct Candidate
+        {
+            cv::dnn::Backend backend;
+            cv::dnn::Target target;
+            const char *label;
+        };
+        // Priority: CUDA FP16 > CUDA FP32 > OpenCL FP16 > OpenCL FP32 > CPU
+        static constexpr Candidate kCandidates[] = {
+            {cv::dnn::DNN_BACKEND_CUDA, cv::dnn::DNN_TARGET_CUDA_FP16, "CUDA FP16"},
+            {cv::dnn::DNN_BACKEND_CUDA, cv::dnn::DNN_TARGET_CUDA, "CUDA"},
+            {cv::dnn::DNN_BACKEND_OPENCV, cv::dnn::DNN_TARGET_OPENCL_FP16, "OpenCL FP16"},
+            {cv::dnn::DNN_BACKEND_OPENCV, cv::dnn::DNN_TARGET_OPENCL, "OpenCL"},
+            {cv::dnn::DNN_BACKEND_DEFAULT, cv::dnn::DNN_TARGET_CPU, "CPU"},
+        };
+
+        const auto available = cv::dnn::getAvailableBackends();
+        Logger::info(std::format("PoseTrackingService: {} DNN backend/target pair(s) reported available:",
+                                 available.size()));
+        for (const auto &[b, t] : available)
+            Logger::info(std::format("  backend={} target={}", static_cast<int>(b), static_cast<int>(t)));
+
+        // Pick the highest-priority candidate that the build actually supports
+        cv::dnn::Backend sel_backend = cv::dnn::DNN_BACKEND_DEFAULT;
+        cv::dnn::Target sel_target = cv::dnn::DNN_TARGET_CPU;
+        backend_label_ = "CPU";
+
+        for (const auto &c : kCandidates)
+        {
+            bool found = false;
+            for (const auto &[b, t] : available)
+                if (b == c.backend && t == c.target)
+                {
+                    found = true;
+                    break;
+                }
+            if (found)
+            {
+                sel_backend = c.backend;
+                sel_target = c.target;
+                backend_label_ = c.label;
+                break;
+            }
+        }
+
+        Logger::info(std::format("PoseTrackingService: attempting to use backend: {}", backend_label_));
+        net_.setPreferableBackend(sel_backend);
+        net_.setPreferableTarget(sel_target);
+
+        // Warm-up forward pass — verifies the backend actually executes on the
+        // selected device and pre-allocates GPU memory, so the first real frame
+        // does not pay the initialisation cost.
+        {
+            cv::Mat dummy(input_size_, input_size_, CV_8UC3, cv::Scalar(114, 114, 114));
+            cv::Mat blob = cv::dnn::blobFromImage(
+                dummy, 1.0 / 255.0, cv::Size(input_size_, input_size_),
+                cv::Scalar(0, 0, 0), /*swapRB=*/true, /*crop=*/false);
+            net_.setInput(blob);
+            try
+            {
+                cv::Mat warmup_out = net_.forward();
+                Logger::info(std::format(
+                    "PoseTrackingService: warm-up forward pass succeeded — GPU backend '{}' is active",
+                    backend_label_));
+            }
+            catch (const cv::Exception &e)
+            {
+                Logger::warn(std::format(
+                    "PoseTrackingService: warm-up on '{}' failed ({}); falling back to CPU",
+                    backend_label_, e.what()));
+                backend_label_ = "CPU (fallback)";
+                net_.setPreferableBackend(cv::dnn::DNN_BACKEND_DEFAULT);
+                net_.setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
+                // Re-run warm-up on CPU to pre-allocate memory
+                try
+                {
+                    net_.setInput(blob);
+                    net_.forward();
+                    Logger::info("PoseTrackingService: CPU fallback warm-up succeeded");
+                }
+                catch (const cv::Exception &e2)
+                {
+                    Logger::error(std::format(
+                        "PoseTrackingService: CPU warm-up also failed ({})", e2.what()));
+                }
+            }
+        }
 
         initialized_ = true;
-        Logger::info(std::format("PoseTrackingService initialized from: {}", model_path));
+        Logger::info(std::format("PoseTrackingService initialized from: {}  [backend: {}]",
+                                 model_path, backend_label_));
         return true;
     }
 
@@ -76,6 +162,12 @@ namespace sag
             cv::Scalar(0, 0, 0), /*swapRB=*/true, /*crop=*/false);
 
         net_.setInput(blob);
+
+        // Periodic log: confirm which backend is executing (once per 300 frames)
+        ++frame_count_;
+        if (frame_count_ % 300 == 1)
+            Logger::info(std::format("PoseTrackingService: forward pass running on '{}' (frame {})",
+                                     backend_label_, frame_count_));
 
         // Forward pass — output: [1, 56, 8400]
         cv::Mat raw = net_.forward();

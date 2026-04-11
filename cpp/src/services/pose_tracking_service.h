@@ -30,6 +30,8 @@ namespace sag
         int num_poses_ = 4;
         int input_size_ = 640; // YOLOv8-pose expects 640x640
         bool initialized_ = false;
+        std::string backend_label_ = "CPU"; // label of the active DNN backend
+        int frame_count_ = 0;               // used to throttle periodic GPU log
     };
 
 } // namespace sag
