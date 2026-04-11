@@ -138,11 +138,11 @@ namespace sag::ui
         }
     }
 
-    void D3DWindow::present()
+    void D3DWindow::present(int sync_interval)
     {
         if (d3d_ctx_.swapchain)
         {
-            d3d_ctx_.swapchain->Present(1, 0); // vsync on
+            d3d_ctx_.swapchain->Present(sync_interval, 0);
         }
     }
 

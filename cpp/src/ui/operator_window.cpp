@@ -178,7 +178,7 @@ namespace sag::ui
         d3d_ctx_.context->ClearRenderTargetView(d3d_ctx_.rtv.Get(), clear_color);
 
         ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
-        d3d_ctx_.swapchain->Present(1, 0);
+        d3d_ctx_.swapchain->Present(0, 0); // no vsync — projector drives frame pacing
     }
 
     void OperatorWindow::set_camera_devices(std::vector<std::string> device_names)

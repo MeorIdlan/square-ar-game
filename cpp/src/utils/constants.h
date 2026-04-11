@@ -31,7 +31,7 @@ namespace sag::constants
     inline constexpr int DEBUG_CANVAS_HEIGHT = 640;
 
     // ── Game loop ─────────────────────────────────────────────────────────
-    inline constexpr int GAME_TICK_INTERVAL_MS = 100;
+    inline constexpr int GAME_TICK_INTERVAL_MS = 33;
 
     // ── Overlay rendering (BGR order to match OpenCV) ─────────────────────
     inline constexpr uint8_t FLASHING_CELL_COLOR_B = 15;

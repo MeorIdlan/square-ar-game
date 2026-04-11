@@ -158,6 +158,7 @@ namespace sag
         MSG msg{};
         while (running_)
         {
+            // Process all pending messages
             while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE))
             {
                 if (msg.message == WM_QUIT)
@@ -166,10 +167,9 @@ namespace sag
                     break;
                 }
 
-                if (msg.hwnd == operator_window_->hwnd() && msg.message == WM_TIMER)
+                if (msg.hwnd == operator_window_->hwnd() && msg.message == WM_TIMER && msg.wParam == GAME_TIMER_ID)
                 {
                     on_game_tick();
-                    render_all();
                     continue;
                 }
 
@@ -187,8 +187,15 @@ namespace sag
                 break;
             }
 
-            // Yield to avoid busy-wait when no messages
-            WaitMessage();
+            // Render every iteration — projector vsync (Present(1,0)) provides
+            // natural ~60 Hz frame pacing for the whole loop.
+            render_all();
+
+            // If projector is not visible (no vsync blocking), prevent busy-wait
+            if (!projector_window_ || !projector_window_->is_visible())
+            {
+                Sleep(1);
+            }
         }
 
         KillTimer(operator_window_->hwnd(), GAME_TIMER_ID);
@@ -437,6 +444,8 @@ namespace sag
                                   config_.camera.frame_width,
                                   config_.camera.frame_height,
                                   config_.camera.target_fps);
+            if (camera_worker_)
+                camera_worker_->set_target_fps(config_.camera.target_fps);
             operator_window_->set_camera_formats(
                 std::vector<CameraProfile>(camera_service_->cached_formats()));
             session_.camera_status_message = "Camera reconnected";
@@ -449,6 +458,8 @@ namespace sag
             camera_service_->open(idx, config_.camera.frame_width,
                                   config_.camera.frame_height,
                                   config_.camera.target_fps);
+            if (camera_worker_)
+                camera_worker_->set_target_fps(config_.camera.target_fps);
             operator_window_->set_camera_formats(
                 std::vector<CameraProfile>(camera_service_->cached_formats()));
             session_.camera_status_message = std::format("Camera switched to {}", idx);
@@ -460,6 +471,8 @@ namespace sag
             camera_service_->release();
             camera_service_->open(config_.camera.camera_index,
                                   profile.width, profile.height, profile.fps);
+            if (camera_worker_)
+                camera_worker_->set_target_fps(profile.fps);
             Logger::info(std::format("Camera format changed to {}x{} @ {} fps",
                                      profile.width, profile.height, profile.fps));
             session_.camera_status_message = std::format("Camera format: {}", profile.label());
