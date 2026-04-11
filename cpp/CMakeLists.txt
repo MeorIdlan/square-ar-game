@@ -73,6 +73,9 @@ target_link_libraries(square_ar_core PUBLIC
     ${OpenCV_LIBS}
     nlohmann_json::nlohmann_json
 )
+if(WIN32)
+    target_link_libraries(square_ar_core PUBLIC mf mfplat mfreadwrite mfuuid)
+endif()
 
 # ── Executable ─────────────────────────────────────────────────────────
 if(WIN32)
@@ -87,7 +90,6 @@ if(WIN32)
         square_ar_core
         imgui::imgui
         d3d11 dxgi d3dcompiler
-        mf mfplat mfreadwrite mfuuid
         Microsoft::DirectXTK
     )
     target_include_directories(square_ar_game PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
